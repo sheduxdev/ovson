@@ -38,6 +38,11 @@ add_executable(OVsonLoader WIN32
 # and is then #include'd from main.cpp as "ovson_ui.h".
 slint_target_sources(OVsonLoader slint_ui/ovson_ui.slint)
 
+# The UI imports the Sen .ttf files. Without this the generated code points at
+# the fonts by absolute build-machine path and they are missing on every other
+# machine; embed-files bakes the bytes into the executable instead.
+set_property(TARGET OVsonLoader PROPERTY SLINT_EMBED_RESOURCES embed-files)
+
 target_include_directories(OVsonLoader PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/slint_ui
 )

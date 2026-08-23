@@ -1,4 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
+import "fonts/Sen-Regular.ttf";
+import "fonts/Sen-Medium.ttf";
+import "fonts/Sen-SemiBold.ttf";
 export struct LogLine {
     text: string,
     color: color,
@@ -44,7 +47,7 @@ global Palette {
     out property <color> text-dim:     #a1a1aa;   // muted-foreground
     out property <color> text-muted:   #71717a;
     out property <color> success:      #22c55e;
-    out property <color> success-dim:  #166534;
+    out property <color> success-dim:  #14532d;
     out property <color> error-c:      #ef4444;
     out property <color> disabled:     #27272a;
 }
@@ -55,10 +58,10 @@ component InfoChip inherits Rectangle {
     in property <bool>   filled: false;
 
     height: 18px;
-    border-radius: 9px;
-    background: filled ? accent : transparent;
+    border-radius: 4px;
+    background: filled ? Palette.accent-dim : transparent;
     border-width: filled ? 0px : 1px;
-    border-color: Palette.border-hover;
+    border-color: Palette.border;
 
     HorizontalLayout {
         padding-left: 7px;
@@ -66,7 +69,7 @@ component InfoChip inherits Rectangle {
         alignment: center;
         Text {
             text: root.label;
-            color: filled ? Palette.bg : accent;
+            color: filled ? Palette.text-dim : Palette.text-muted;
             font-size: 10px;
             font-weight: 500;
             vertical-alignment: center;
@@ -80,7 +83,7 @@ component ProcessCard inherits Rectangle {
     callback uninject-clicked();
     callback right-clicked();
 
-    height: 84px;
+    height: 76px;
     border-radius: 8px;
     border-width: 1px;
 
@@ -158,7 +161,11 @@ component ProcessCard inherits Rectangle {
                     : data.finished-fail ? "PID \{data.pid}  •  \{data.stage}"
                     : data.injected      ? "PID \{data.pid}  •  Already injected"
                     : data.finished-ok   ? "PID \{data.pid}  •  Injected"
-                                         : "PID \{data.pid}";
+                                         : "PID \{data.pid}"
+                                           + (data.memory-text != ""
+                                              ? "  •  " + data.memory-text : "")
+                                           + (data.uptime-text != ""
+                                              ? "  •  " + data.uptime-text : "");
                 color: data.finished-fail ? Palette.error-c
                      : data.working       ? Palette.accent
                      : data.injected      ? Palette.accent
@@ -179,14 +186,6 @@ component ProcessCard inherits Rectangle {
                 if data.mc-version != "": InfoChip {
                     label: data.mc-version;
                     accent: Palette.text-dim;
-                }
-                if data.memory-text != "": InfoChip {
-                    label: data.memory-text;
-                    accent: Palette.text-muted;
-                }
-                if data.uptime-text != "": InfoChip {
-                    label: data.uptime-text;
-                    accent: Palette.text-muted;
                 }
             }
         }
@@ -481,6 +480,7 @@ component LogsPage inherits Rectangle {
                         font-size: 11px;
                         wrap: word-wrap;
                     }
+                    Rectangle { vertical-stretch: 1; }
                 }
             }
         }
@@ -993,6 +993,8 @@ component SettingsPage inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "OVson";
+    default-font-family: "Sen";
+    default-font-size: 13px;
     icon: @image-url("ovson_logo.png");
     width: 860px;
     height: 600px;
@@ -1279,7 +1281,7 @@ export component MainWindow inherits Window {
 
                     Rectangle { height: 4px; }
 
-                    VerticalLayout {
+                    if announcements.length > 0: VerticalLayout {
                         vertical-stretch: 1;
                         spacing: 8px;
 
@@ -1300,6 +1302,7 @@ export component MainWindow inherits Window {
                             background: Palette.card;
                             border-width: 1px;
                             border-color: Palette.border;
+                            min-height: 104px;
 
                             ScrollView {
                                 VerticalLayout {
@@ -1307,22 +1310,6 @@ export component MainWindow inherits Window {
                                     padding-bottom: 14px;
                                     spacing: 0;
                                     
-                                    if announcements.length == 0: VerticalLayout {
-                                        padding: 16px;
-                                        spacing: 6px;
-                                        Text {
-                                            text: "Welcome to OVson!";
-                                            color: Palette.text;
-                                            font-weight: 600;
-                                            font-size: 14px;
-                                        }
-                                        Text {
-                                            text: "Updates and news will be displayed here soon. Stay tuned for new features and improvements!";
-                                            color: Palette.text-muted;
-                                            font-size: 12px;
-                                            wrap: word-wrap;
-                                        }
-                                    }
                                     
                                     for ann[i] in announcements: VerticalLayout {
                                         padding: 6px;
@@ -1409,92 +1396,100 @@ export component MainWindow inherits Window {
                 opacity: phase >= 2 && dump-count > 0 ? 1.0 : 0.0;
                 animate height, opacity { duration: 350ms; easing: ease-in-out; }
                 clip: true;
-                background: Palette.card;
-                border-color: #a16207;
-                border-width: 1px;
-                border-radius: 8px;
+                background: transparent;
 
-                HorizontalLayout {
-                    padding-left: 14px;
-                    padding-right: 6px;
-                    spacing: 10px;
-                    alignment: center;
+                Rectangle {
+                    x: 28px;
+                    y: 0;
+                    width: parent.width - 56px;
+                    height: 40px;
+                    background: Palette.card;
+                    border-color: #a16207;
+                    border-width: 1px;
+                    border-radius: 8px;
 
-                    VerticalLayout {
-                        horizontal-stretch: 1;
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 6px;
+                        spacing: 10px;
                         alignment: center;
-                        Text {
-                            text: dump-count == 1
-                                ? "1 crash dump from a previous session is waiting."
-                                : dump-count + " crash dumps from previous sessions are waiting.";
-                            color: #fbbf24;
-                            font-size: 12px;
-                            font-weight: 500;
-                            overflow: elide;
+    
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            Text {
+                                text: dump-count == 1
+                                    ? "1 crash dump from a previous session is waiting."
+                                    : dump-count + " crash dumps from previous sessions are waiting.";
+                                color: Palette.text;
+                                font-size: 12px;
+                                font-weight: 500;
+                                overflow: elide;
+                            }
                         }
-                    }
-                    Rectangle {
-                        width: 96px; height: 28px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: 6px;
-                        background: open-touch.has-hover
-                                    ? Palette.card-hover : transparent;
-                        border-width: 1px;
-                        border-color: #a16207;
-                        open-touch := TouchArea {
-                            clicked => { root.open-dumps-folder(); }
-                            mouse-cursor: MouseCursor.pointer;
-                        }
-                        Text {
-                            x: (parent.width - self.width) / 2;
+                        Rectangle {
+                            width: 96px; height: 28px;
                             y: (parent.height - self.height) / 2;
-                            text: "View";
-                            color: #fbbf24;
-                            font-weight: 500;
-                            font-size: 10px;
+                            border-radius: 6px;
+                            background: open-touch.has-hover
+                                        ? Palette.card-hover : transparent;
+                            border-width: 1px;
+                            border-color: #a16207;
+                            open-touch := TouchArea {
+                                clicked => { root.open-dumps-folder(); }
+                                mouse-cursor: MouseCursor.pointer;
+                            }
+                            Text {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                text: "View";
+                                color: Palette.text;
+                                font-weight: 500;
+                                font-size: 10px;
+                            }
                         }
-                    }
-                    Rectangle {
-                        width: 96px; height: 28px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: 6px;
-                        background: report-touch.has-hover
-                                    ? #a16207 : transparent;
-                        border-width: 1px;
-                        border-color: #a16207;
-                        animate background { duration: 130ms; }
-                        report-touch := TouchArea {
-                            clicked => { root.show-report-modal = true; }
-                            mouse-cursor: MouseCursor.pointer;
-                        }
-                        Text {
-                            x: (parent.width - self.width) / 2;
+                        Rectangle {
+                            width: 96px; height: 28px;
                             y: (parent.height - self.height) / 2;
-                            text: "Report…";
-                            color: report-touch.has-hover
-                                   ? Palette.bg : #fbbf24;
-                            font-weight: 500;
-                            font-size: 10px;
+                            border-radius: 6px;
+                            background: report-touch.has-hover
+                                        ? #a16207 : transparent;
+                            border-width: 1px;
+                            border-color: #a16207;
+                            animate background { duration: 130ms; }
+                            report-touch := TouchArea {
+                                clicked => { root.show-report-modal = true; }
+                                mouse-cursor: MouseCursor.pointer;
+                            }
+                            Text {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                text: "Report…";
+                                color: report-touch.has-hover
+                                       ? Palette.bg : #fbbf24;
+                                font-weight: 500;
+                                font-size: 10px;
+                            }
                         }
-                    }
-                    Rectangle {
-                        width: 28px; height: 28px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: 6px;
-                        background: dismiss-touch.has-hover
-                                    ? Palette.card-hover : transparent;
-                        dismiss-touch := TouchArea {
-                            clicked => { root.dismiss-crash-dumps(); }
-                            mouse-cursor: MouseCursor.pointer;
-                        }
-                        Image {
-                            x: (parent.width - self.width) / 2;
+                        Rectangle {
+                            width: 28px; height: 28px;
                             y: (parent.height - self.height) / 2;
-                            width: 10px;
-                            height: 10px;
-                            colorize: dismiss-touch.has-hover ? Palette.text : Palette.text-dim;
-                            source: @image-url("close.svg");
-                            animate colorize { duration: 140ms; }
+                            border-radius: 6px;
+                            background: dismiss-touch.has-hover
+                                        ? Palette.card-hover : transparent;
+                            dismiss-touch := TouchArea {
+                                clicked => { root.dismiss-crash-dumps(); }
+                                mouse-cursor: MouseCursor.pointer;
+                            }
+                            Image {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                width: 10px;
+                                height: 10px;
+                                colorize: dismiss-touch.has-hover ? Palette.text : Palette.text-dim;
+                                source: @image-url("close.svg");
+                                animate colorize { duration: 140ms; }
+                            }
                         }
                     }
                 }
@@ -1505,110 +1500,117 @@ export component MainWindow inherits Window {
                 opacity: phase >= 2 && update-state >= 1 && update-state <= 6 ? 1.0 : 0.0;
                 animate height, opacity { duration: 350ms; easing: ease-in-out; }
                 clip: true;
-                background: Palette.card;
-                animate background { duration: 250ms; easing: ease-out; }
-                border-color: update-state == 2 ? Palette.success-dim
-                            : update-state == 6 ? Palette.error-c
-                                                : Palette.border;
-                animate border-color { duration: 250ms; easing: ease-out; }
-                border-width: 1px;
-                border-radius: 8px;
+                background: transparent;
 
-                HorizontalLayout {
-                    padding-left: 14px;
-                    padding-right: 6px;
-                    spacing: 10px;
-                    alignment: center;
+                Rectangle {
+                    x: 28px;
+                    y: 0;
+                    width: parent.width - 56px;
+                    height: 40px;
+                    background: Palette.card;
+                    animate background { duration: 250ms; easing: ease-out; }
+                    border-color: update-state == 2 ? Palette.success-dim
+                                : update-state == 6 ? Palette.error-c
+                                                    : Palette.border;
+                    animate border-color { duration: 250ms; easing: ease-out; }
+                    border-width: 1px;
+                    border-radius: 8px;
 
-                    VerticalLayout {
-                        horizontal-stretch: 1;
+                    HorizontalLayout {
+                        padding-left: 14px;
+                        padding-right: 6px;
+                        spacing: 10px;
                         alignment: center;
-                        spacing: 2px;
-                        Text {
-                            text: update-state == 1 ? "Checking for updates…"
-                                : update-state == 2 ? "You are using the latest version!"
-                                : update-state == 3 ? "Update available: " + update-version
-                                : update-state == 4 ? "Downloading " + update-version + "…"
-                                : update-state == 5 ? "Update ready to install"
-                                : update-state == 6 ? update-status
-                                                    : "";
-                            color: update-state == 2 ? Palette.success
-                                 : update-state == 6 ? Palette.error-c
-                                                     : Palette.text;
-                            font-size: 12px;
-                            font-weight: 500;
-                            overflow: elide;
-                        }
-                        if update-state == 4 && update-progress < 100: Rectangle {
-                            height: 3px;
-                            border-radius: 1.5px;
-                            background: Palette.border;
-                            Rectangle {
-                                x: 0; y: 0;
-                                width: parent.width * update-progress / 100;
-                                height: parent.height;
-                                background: Palette.accent;
+    
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            alignment: center;
+                            spacing: 2px;
+                            Text {
+                                text: update-state == 1 ? "Checking for updates…"
+                                    : update-state == 2 ? "You are using the latest version!"
+                                    : update-state == 3 ? "Update available: " + update-version
+                                    : update-state == 4 ? "Downloading " + update-version + "…"
+                                    : update-state == 5 ? "Update ready to install"
+                                    : update-state == 6 ? update-status
+                                                        : "";
+                                color: update-state == 6 ? Palette.error-c
+                                                         : Palette.text;
+                                font-size: 12px;
+                                font-weight: 500;
+                                overflow: elide;
+                            }
+                            if update-state == 4 && update-progress < 100: Rectangle {
+                                height: 3px;
                                 border-radius: 1.5px;
-                                animate width { duration: 200ms; easing: ease-out; }
+                                background: Palette.border;
+                                Rectangle {
+                                    x: 0; y: 0;
+                                    width: parent.width * update-progress / 100;
+                                    height: parent.height;
+                                    background: Palette.accent;
+                                    border-radius: 1.5px;
+                                    animate width { duration: 200ms; easing: ease-out; }
+                                }
                             }
                         }
-                    }
-
-                    if update-state == 3: Rectangle {
-                        width: 96px;
-                        height: 28px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: 6px;
-                        background: changelog-touch.has-hover
-                                    ? Palette.card-hover
-                                    : transparent;
-                        border-width: 1px;
-                        border-color: Palette.border-hover;
-                        animate background { duration: 130ms; easing: ease-out; }
-
-                        changelog-touch := TouchArea {
-                            clicked => { root.view-changelog(); }
-                            mouse-cursor: MouseCursor.pointer;
-                        }
-                        Text {
-                            x: (parent.width - self.width) / 2;
+    
+                        if update-state == 3: Rectangle {
+                            width: 96px;
+                            height: 28px;
                             y: (parent.height - self.height) / 2;
-                            text: "View Changes";
-                            color: Palette.text-dim;
-                            font-weight: 500;
-                            font-size: 10px;
+                            border-radius: 6px;
+                            background: changelog-touch.has-hover
+                                        ? Palette.card-hover
+                                        : transparent;
+                            border-width: 1px;
+                            border-color: Palette.border-hover;
+                            animate background { duration: 130ms; easing: ease-out; }
+    
+                            changelog-touch := TouchArea {
+                                clicked => { root.view-changelog(); }
+                                mouse-cursor: MouseCursor.pointer;
+                            }
+                            Text {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                text: "View Changes";
+                                color: Palette.text-dim;
+                                font-weight: 500;
+                                font-size: 10px;
+                            }
                         }
-                    }
-
-                    if update-state == 3 || update-state == 4 || update-state == 5: Rectangle {
-                        width: 96px;
-                        height: 28px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: 6px;
-                        background: install-touch.pressed   ? Palette.accent-dim
-                                  : install-touch.has-hover ? #e4e4e7
-                                  : update-state == 4       ? Palette.border
-                                                            : Palette.accent;
-                        animate background { duration: 130ms; easing: ease-out; }
-                        opacity: update-state == 4 ? 0.6 : 1.0;
-
-                        install-touch := TouchArea {
-                            enabled: update-state != 4;
-                            clicked => { root.install-update(); }
-                            mouse-cursor: update-state == 4
-                                          ? MouseCursor.default
-                                          : MouseCursor.pointer;
-                        }
-                        Text {
-                            x: (parent.width - self.width) / 2;
+    
+                        if update-state == 3 || update-state == 4 || update-state == 5: Rectangle {
+                            width: 96px;
+                            height: 28px;
                             y: (parent.height - self.height) / 2;
-                            text: update-state == 5 ? "Restart"
-                                : update-state == 4 ? "…"
-                                                    : "Install";
-                            color: update-state == 4 ? Palette.text-dim
-                                                     : Palette.bg;
-                            font-weight: 500;
-                            font-size: 11px;
+                            border-radius: 6px;
+                            background: install-touch.pressed   ? Palette.accent-dim
+                                      : install-touch.has-hover ? #e4e4e7
+                                      : update-state == 4       ? Palette.border
+                                                                : Palette.accent;
+                            animate background { duration: 130ms; easing: ease-out; }
+                            opacity: update-state == 4 ? 0.6 : 1.0;
+    
+                            install-touch := TouchArea {
+                                enabled: update-state != 4;
+                                clicked => { root.install-update(); }
+                                mouse-cursor: update-state == 4
+                                              ? MouseCursor.default
+                                              : MouseCursor.pointer;
+                            }
+                            Text {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                text: update-state == 5 ? "Restart"
+                                    : update-state == 4 ? "…"
+                                                        : "Install";
+                                color: update-state == 4 ? Palette.text-dim
+                                                         : Palette.bg;
+                                font-weight: 500;
+                                font-size: 11px;
+                            }
                         }
                     }
                 }
