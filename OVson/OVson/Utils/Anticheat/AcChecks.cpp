@@ -4,6 +4,7 @@
 #include "../../Config/Config.h"
 #include "../../Java.h"
 #include "AcInternal.h"
+#include "AcModels.h"
 #include <Windows.h>
 #include <algorithm>
 #include <cmath>
@@ -13,6 +14,8 @@
 
 namespace Anticheat {
 namespace Checks {
+
+static const double kPi = 3.14159265358979323846;
 
 static bool isSwordId(int id) {
   return id == 267 || id == 268 || id == 272 || id == 276 || id == 283;
@@ -41,16 +44,18 @@ static double wrapAngle180(double a) {
   return a;
 }
 
-static double relativeMoveYaw(double dx, double dz, float yaw) {
-  double moveAngle = std::atan2(-dx, dz) * 180.0 / 3.14159265358979323846;
-  return wrapAngle180(moveAngle - yaw);
-}
-
+// ---------------------------------------------------------------------------
+// NoSlow — sprinting while an action that should slow you down is in progress.
+// ---------------------------------------------------------------------------
 class NoSlowCheck : public Check {
 public:
-  NoSlowCheck() : Check("NoSlow", "Sprint while blocking/eating/drawing.") {}
+  NoSlowCheck()
+      : Check(CHECK_NOSLOW, "NoSlow", "Sprint while blocking/eating/drawing.") {
+  }
   void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
     if (!Config::isAnticheatNoSlowEnabled())
+      return;
+    if (p.isLocalPlayer && !Config::isAnticheatCheckSelfEnabled())
       return;
 
     bool slowItem = false;
@@ -60,111 +65,323 @@ public:
         (p.heldItemId == 261 || isFoodOrBowOrSword(p.heldItemId)))
       slowItem = true;
 
+    auto &st = p.checks[CHECK_NOSLOW];
     bool now = slowItem && p.isSprinting && !p.isRiding;
-    if (now && !m_active) {
-      m_active = true;
-      m_startMs = (long)GetTickCount64();
-    } else if (!now) {
-      m_active = false;
-      m_startMs = 0;
+    ULONGLONG ms = GetTickCount64();
+
+    if (!now) {
+      st.stateSince = 0;
+      return;
     }
-    if (m_active) {
-      long dur = (long)GetTickCount64() - m_startMs;
-      if (dur > 200) {
-        std::ostringstream ss;
-        ss << "duration: " << dur << "ms";
-        flag(p, this, ss.str(), 1.0);
-        m_active = false;
-        m_startMs = 0;
-      }
+    if (!st.stateSince) {
+      st.stateSince = ms;
+      return;
+    }
+    ULONGLONG dur = ms - st.stateSince;
+    if (dur > 200) {
+      std::ostringstream ss;
+      ss << "duration: " << dur << "ms";
+      flag(p, this, ss.str(), 1.0);
+      st.stateSince = 0;
     }
   }
-
-private:
-  bool m_active = false;
-  long m_startMs = 0;
 };
 
+// ---------------------------------------------------------------------------
+// AutoBlock — the sword goes back up after an attack without a human doing the
+// releasing and re-pressing.
+//
+// One "the sword was up right after a swing" event proves nothing: that is
+// exactly what a good manual blockhitter produces. What separates a macro from
+// a person is the *shape* of the evidence, so three independent properties are
+// measured and only their agreement raises violation level.
+//
+//   1. Re-block delay agreement. Every attack that is followed by a block
+//      contributes the gap, in Minecraft ticks, between the two. A person
+//      spreads these across a handful of values; a macro puts nearly all of
+//      them on one. modalRatio() measures that directly and is immune to the
+//      tick quantisation that makes a millisecond standard deviation useless.
+//   2. Blocks per second. Each re-press is a physical mouse action. Sustained
+//      rates above what a hand produces are their own evidence.
+//   3. Follow-through rate. What fraction of attacks are followed by a block
+//      at all. A person misses some; a macro does not.
+// ---------------------------------------------------------------------------
 class AutoBlockCheck : public Check {
 public:
   AutoBlockCheck()
-      : Check("AutoBlock", "Attack while sword stays blocked") {}
+      : Check(CHECK_AUTOBLOCK, "AutoBlock",
+              "Sword re-blocks after attacks with machine timing") {}
+
   void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
     if (!Config::isAnticheatAutoBlockEnabled())
       return;
     if (p.isLocalPlayer && !Config::isAnticheatCheckSelfEnabled())
       return;
-
-    long currentMs = (long)GetTickCount64();
-
-    if (p.isBlocking && !p.wasBlocking) {
-      p.lastBlockStartMs = currentMs;
+    if (!isSwordId(p.heldItemId)) {
+      p.pendingSwingOpen = false;
+      return;
     }
 
-    bool isHoldingSword = isSwordId(p.heldItemId);
-    bool isSwinging = p.isSwingInProgress;
+    const long tick = p.currentTick;
+    const ULONGLONG ms = GetTickCount64();
 
-    if (isSwinging &&
-        (p.lastSwingDetectedMs == 0 ||
-         currentMs - p.lastSwingDetectedMs > 100)) {
-      bool blockingAtSwing = p.isBlocking;
-      PlayerData::Swing sw;
-      sw.ms = currentMs;
-      sw.wasBlockingBefore = blockingAtSwing;
-      sw.afterTrack = -1;
-      p.swings.push_back(sw);
-      p.lastSwingDetectedMs = currentMs;
-      if (p.swings.size() > 20)
-        p.swings.erase(p.swings.begin());
-      abLog("swing recorded: name='%s' local=%d itemId=%d isBlocking=%d "
-            "isUsingItem=%d lastBlockAgeMs=%ld wasBlockingBefore=%d",
-            p.name.c_str(), (int)p.isLocalPlayer, p.heldItemId,
-            (int)p.isBlocking, (int)p.isUsingItem,
-            p.lastBlockStartMs > 0 ? (long)(currentMs - p.lastBlockStartMs)
-                                   : -1L,
-            (int)blockingAtSwing);
+    // Every fresh press of the block button is one physical action.
+    if (p.isBlocking && !p.wasBlocking)
+      p.blockStarts.push(ms);
+
+    // A new attack animation opens a window; the sword coming back up inside
+    // it closes the window and records the delay.
+    bool swingEdge = (p.swingEdgeTick == tick);
+    if (swingEdge) {
+      // An attack that never got its block is evidence too, so close any
+      // window still open from the previous swing before starting a new one.
+      if (p.pendingSwingOpen)
+        p.swingBlocked.push(0);
+      p.pendingSwingOpen = true;
+      p.pendingSwingTick = tick;
     }
 
-    for (auto &sw : p.swings) {
-      if (sw.afterTrack == 1) continue;
-      long since = currentMs - sw.ms;
-      if (since >= 150 && since <= 200 && p.isBlocking) {
-        sw.afterTrack = 1;
-      } else if (sw.afterTrack == -1 && since > 200) {
-        sw.afterTrack = 0;
+    if (p.pendingSwingOpen) {
+      long age = tick - p.pendingSwingTick;
+      if (p.isBlocking && age >= 0 && age <= kMaxReblockTicks) {
+        p.reblockDelayTicks.push((uint8_t)age);
+        p.swingBlocked.push(1);
+        p.pendingSwingOpen = false;
+      } else if (age > kMaxReblockTicks) {
+        p.swingBlocked.push(0);
+        p.pendingSwingOpen = false;
       }
     }
 
-    int autoBlockCount = 0;
-    for (const auto &sw : p.swings) {
-      if (currentMs - sw.ms >= 1000)
-        continue;
-      if (sw.afterTrack == -1)
-        continue;
-      if (!isHoldingSword)
-        continue;
-      if (sw.wasBlockingBefore && sw.afterTrack == 1)
-        autoBlockCount++;
+    AutoBlockEvidence e;
+    e.samples = p.reblockDelayTicks.size();
+    uint8_t mode = 0;
+    e.agreement = modalRatio(p.reblockDelayTicks, &mode);
+    e.modeTicks = mode;
+    e.blocksPerSecond = p.blockStarts.ratePerSecond(ms, 1000);
+    e.followThrough = mean(p.swingBlocked);
+
+    Verdict v = scoreAutoBlock(e);
+    if (!v.flag)
+      return;
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2) << "delay:" << (int)e.modeTicks
+       << "t agree:" << e.agreement << " bps:" << std::setprecision(1)
+       << e.blocksPerSecond << " follow:" << std::setprecision(2)
+       << e.followThrough << " conf:" << v.confidence;
+    flag(p, this, ss.str(), v.vlGain);
+
+    // Do not let the same window of samples flag again on the next tick.
+    p.reblockDelayTicks.clear();
+    p.swingBlocked.clear();
+  }
+
+private:
+  // A re-block later than this is a person deciding to block, not a macro
+  // finishing an attack.
+  static const long kMaxReblockTicks = 6;
+};
+
+// ---------------------------------------------------------------------------
+// KillAura — the aim is better than a hand produces.
+// ---------------------------------------------------------------------------
+class KillAuraCheck : public Check {
+public:
+  KillAuraCheck()
+      : Check(CHECK_KILLAURA, "KillAura", "Aim locks onto targets") {}
+
+  void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
+    if (!Config::isAnticheatKillAuraEnabled())
+      return;
+    if (p.isLocalPlayer && !Config::isAnticheatCheckSelfEnabled())
+      return;
+    if (!p.lastAttack.valid)
+      return;
+    if (p.lastAttack.tick == p.lastAttackHandledTick)
+      return;
+    p.lastAttackHandledTick = p.lastAttack.tick;
+
+    const AttackEvent &a = p.lastAttack;
+    p.aimErrors.push((float)a.aimErrorDeg);
+
+    // Hitting something that is not in front of you needs no statistics.
+    if (a.aimErrorDeg > kBehindDeg) {
+      std::ostringstream ss;
+      ss << std::fixed << std::setprecision(1) << "hit at " << a.aimErrorDeg
+         << " deg off";
+      flag(p, this, ss.str(), 4.0);
+      return;
     }
 
-    if (autoBlockCount > 0) {
-      abLog("count tick: name='%s' autoBlockCount=%d swings_in_window=%d",
-            p.name.c_str(), autoBlockCount, (int)p.swings.size());
-    }
-    if (autoBlockCount >= 2) {
+    // Two different players damaged inside one swing window is aura, not aim.
+    int distinct = countRecentVictims(p, a.tick);
+    if (distinct >= 2) {
       std::ostringstream ss;
-      ss << "itemId:" << p.heldItemId << " autoblks:" << autoBlockCount;
-      abLog("FLAG: name='%s' itemId=%d autoblks=%d", p.name.c_str(),
-            p.heldItemId, autoBlockCount);
-      flag(p, this, ss.str(), 5.0);
-      p.swings.clear();
+      ss << distinct << " targets in " << kMultiWindowTicks << "t";
+      flag(p, this, ss.str(), 3.0);
+      return;
     }
+
+    AimEvidence e;
+    e.samples = p.aimErrors.size();
+    e.meanErrorDeg = mean(p.aimErrors);
+    e.stddevErrorDeg = stddev(p.aimErrors);
+    e.yawDeltaBeforeHit = a.yawDeltaBefore;
+    e.lastErrorDeg = a.aimErrorDeg;
+
+    Verdict v = scoreAim(e);
+    if (!v.flag)
+      return;
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2) << "err:" << e.meanErrorDeg
+       << "+-" << e.stddevErrorDeg << " snap:" << std::setprecision(1)
+       << a.yawDeltaBefore << " conf:" << std::setprecision(2) << v.confidence;
+    flag(p, this, ss.str(), v.vlGain);
+    p.aimErrors.clear();
+  }
+
+private:
+  static int countRecentVictims(const PlayerData &p, long tick) {
+    int ids[4];
+    int n = 0;
+    for (int i = 0; i < 4; ++i) {
+      if (!p.recentVictims[i])
+        continue;
+      if (tick - p.recentVictimTicks[i] > kMultiWindowTicks)
+        continue;
+      bool dup = false;
+      for (int j = 0; j < n; ++j)
+        if (ids[j] == p.recentVictims[i])
+          dup = true;
+      if (!dup)
+        ids[n++] = p.recentVictims[i];
+    }
+    return n;
+  }
+
+  static const long kMultiWindowTicks = 4;
+  static constexpr double kBehindDeg = AimLimits::kBehindDeg;
+};
+
+// ---------------------------------------------------------------------------
+// Reach — hits landing from further than an arm reaches.
+// ---------------------------------------------------------------------------
+class ReachCheck : public Check {
+public:
+  ReachCheck() : Check(CHECK_REACH, "Reach", "Attacks from too far away") {}
+
+  void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
+    if (!Config::isAnticheatReachEnabled())
+      return;
+    if (p.isLocalPlayer && !Config::isAnticheatCheckSelfEnabled())
+      return;
+    if (!p.lastAttack.valid)
+      return;
+    if (p.lastAttack.tick == p.lastAttackHandledTickReach)
+      return;
+    p.lastAttackHandledTickReach = p.lastAttack.tick;
+
+    double d = p.lastAttack.distance;
+    if (d <= 0.0 || d > ReachLimits::kAbsurd)
+      return; // pairing is probably wrong, not a long arm
+    p.reachDistances.push((float)d);
+
+    ReachEvidence e;
+    e.samples = p.reachDistances.size();
+    double over = 0.0, worst = 0.0;
+    for (size_t i = 0; i < p.reachDistances.size(); ++i) {
+      double v0 = (double)p.reachDistances[i];
+      if (v0 > ReachLimits::kLimit)
+        over += 1.0;
+      worst = std::max(worst, v0);
+    }
+    e.overLimitFraction = e.samples ? over / (double)e.samples : 0.0;
+    e.worstDistance = worst;
+
+    Verdict v = scoreReach(e);
+    if (!v.flag)
+      return;
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2) << "max:" << e.worstDistance
+       << " over:" << (int)(e.overLimitFraction * 100) << "%";
+    flag(p, this, ss.str(), v.vlGain);
+    p.reachDistances.clear();
   }
 };
 
+// ---------------------------------------------------------------------------
+// Velocity — knockback that does not move the player.
+// ---------------------------------------------------------------------------
+class VelocityCheck : public Check {
+public:
+  VelocityCheck()
+      : Check(CHECK_VELOCITY, "Velocity", "Takes hits without knockback") {}
+
+  void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
+    if (!Config::isAnticheatVelocityEnabled())
+      return;
+    if (p.isLocalPlayer && !Config::isAnticheatCheckSelfEnabled())
+      return;
+
+    const long tick = p.currentTick;
+
+    // Damage just landed: remember where they were standing.
+    if (p.hurtTime > p.lastHurtTime && p.hurtTime > 0 && !p.kbPending) {
+      p.kbPending = true;
+      p.kbTick = tick;
+      p.kbFromX = p.posX;
+      p.kbFromZ = p.posZ;
+      return;
+    }
+
+    if (!p.kbPending)
+      return;
+    if (tick - p.kbTick < kMeasureTicks)
+      return;
+
+    double dx = p.posX - p.kbFromX;
+    double dz = p.posZ - p.kbFromZ;
+    p.kbDistances.push((float)std::sqrt(dx * dx + dz * dz));
+    p.kbPending = false;
+
+    if (p.kbDistances.size() < kMinSamples)
+      return;
+
+    // Any single hit can be absorbed by a wall or a block, so only a run of
+    // hits that all failed to move the player counts.
+    double stopped = 0.0;
+    for (size_t i = 0; i < p.kbDistances.size(); ++i)
+      if (p.kbDistances[i] < kMinTravel)
+        stopped += 1.0;
+    stopped /= (double)p.kbDistances.size();
+
+    if (stopped < 0.8)
+      return;
+
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(2) << "travel:" << mean(p.kbDistances)
+       << "b over " << (int)p.kbDistances.size() << " hits";
+    flag(p, this, ss.str(), 2.0);
+    p.kbDistances.clear();
+  }
+
+private:
+  static const long kMeasureTicks = 4;
+  static const size_t kMinSamples = 8;
+  static constexpr double kMinTravel = 0.18;
+};
+
+// ---------------------------------------------------------------------------
+// Eagle — the mechanical sneak-release rhythm of a bridging assist.
+// ---------------------------------------------------------------------------
 class EagleCheck : public Check {
 public:
-  EagleCheck() : Check("Eagle", "LegitScaffold (mechanical sneak-bridge)") {}
+  EagleCheck()
+      : Check(CHECK_EAGLE, "Eagle", "LegitScaffold (mechanical sneak-bridge)") {
+  }
   void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
     if (!Config::isAnticheatEagleEnabled())
       return;
@@ -173,52 +390,10 @@ public:
 
     long tick = p.currentTick;
     bool released = p.wasSneaking && !p.isSneaking;
-    bool started = !p.wasSneaking && p.isSneaking;
 
-    /*
-    if (p.isLocalPlayer && (tick % 40) == 0) {
-      mapLog("EagleState [local]: tick=%ld isSneaking=%d wasSneaking=%d "
-             "released=%d pitch=%.1f onGround=%d heldItem=%d "
-             "isSwingInProgress=%d crouchHist=%d",
-             tick, (int)p.isSneaking, (int)p.wasSneaking, (int)released,
-             p.rotPitch, (int)p.onGround, p.heldItemId,
-             (int)p.isSwingInProgress, (int)p.crouchDurations.size());
-    }
-    if (p.isLocalPlayer && started) {
-      mapLog("EagleEdge [local]: sneak STARTED tick=%ld", tick);
-    }
-    if (p.isLocalPlayer && released) {
-      mapLog("EagleEdge [local]: sneak RELEASED tick=%ld "
-             "crouchStart=%ld crouchEnd=%ld dur=%ld swingTick=%ld",
-             tick, p.lastCrouchStartTick, p.lastCrouchEndTick,
-             p.lastCrouchEndTick - p.lastCrouchStartTick, p.lastSwingTick);
-    }
-    */
-    if (!p.isLocalPlayer && (tick % 40) == 0) {
-      mapLog("EagleState [%s]: tick=%ld isSneaking=%d wasSneaking=%d "
-             "released=%d pitch=%.1f onGround=%d heldItem=%d "
-             "isSwingInProgress=%d crouchHist=%d",
-             p.name.c_str(), tick, (int)p.isSneaking, (int)p.wasSneaking,
-             (int)released, p.rotPitch, (int)p.onGround, p.heldItemId,
-             (int)p.isSwingInProgress, (int)p.crouchDurations.size());
-    }
-    if (!p.isLocalPlayer && started) {
-      mapLog("EagleEdge [%s]: sneak STARTED tick=%ld", p.name.c_str(), tick);
-    }
-    if (!p.isLocalPlayer && released) {
-      mapLog("EagleEdge [%s]: sneak RELEASED tick=%ld "
-             "crouchStart=%ld crouchEnd=%ld dur=%ld swingTick=%ld",
-             p.name.c_str(), tick, p.lastCrouchStartTick, p.lastCrouchEndTick,
-             p.lastCrouchEndTick - p.lastCrouchStartTick, p.lastSwingTick);
-    }
-
-    if (released || tick % 100 == 0) {
-        if (p.rotPitch > 60.0f) {
-            debugLog("EagleStatus [%s]: sneak=%d rel=%d pitch=%.1f block=%d gnd=%d", 
-                     p.name.c_str(), (int)p.isSneaking, (int)released, p.rotPitch, (int)isPlaceableBlockId(p.heldItemId), (int)p.onGround);
-        }
-    }
-
+    auto &state = p.checks[CHECK_EAGLE];
+    if (state.vl > 0)
+      state.vl -= 0.01;
 
     if (!released)
       return;
@@ -230,73 +405,63 @@ public:
 
     bool quickCrouch = crouchDur >= 1 && crouchDur <= 2;
     bool swingTiming = (swing >= end - 1 && swing <= end + 1);
-    
+
     int fastSamples = 0;
-    std::string history = "";
     for (size_t i = 0; i < p.crouchDurations.size() && i < 5; i++) {
-        int d = p.crouchDurations[i];
-        if (d >= 1 && d <= 2) fastSamples++;
-        history += std::to_string(d) + (i == p.crouchDurations.size() - 1 || i == 4 ? "" : ",");
+      int d = p.crouchDurations[i];
+      if (d >= 1 && d <= 2)
+        fastSamples++;
     }
     bool consistent = (fastSamples >= 4);
 
-    bool recentlyOnGround = p.onGround || (tick - p.lastOnGroundTick) <= 5;
     bool holdingBlock = isPlaceableBlockId(p.heldItemId);
     bool lookingDown = p.rotPitch >= 60.0f;
 
-
-    if (quickCrouch) {
-        debugLog("EagleDebug [%s]: dur=%d itemID=%d quick=%d swing=%d consist=%d(%d/5) pitch=%.1f block=%d gnd=%d(rec=%d) hist=[%s]",
-                 p.name.c_str(), crouchDur, p.heldItemId, (int)quickCrouch, (int)swingTiming, (int)consistent, fastSamples, p.rotPitch, (int)holdingBlock, (int)p.onGround, (int)recentlyOnGround, history.c_str());
-    }
-
-
-    auto& state = p.checks[name()];
-
-
-    if (state.vl > 0) state.vl -= 0.01;
-
     if (!lookingDown || !holdingBlock)
-        return;
+      return;
+    if (!(quickCrouch && swingTiming && consistent))
+      return;
 
-    if (quickCrouch && swingTiming && consistent) {
+    state.vl += 1.0;
+    if (state.vl < 5.0)
+      return;
+    if (tick - p.lastEaglePatternTick < 10)
+      return;
 
-        state.vl += 1.0;
-        
-        if (state.vl >= 5.0) {
-            long sinceLast = tick - p.lastEaglePatternTick;
-            if (sinceLast >= 10) {
-                std::ostringstream ss;
-                ss << "Eagle Bridge (VL: " << (int)state.vl << ") | " << crouchDur << "t crouch | Samples: " << fastSamples << "/5";
-                
-                debugLog("[Eagle FLAG] %s | %s", p.name.c_str(), ss.str().c_str());
-                flag(p, this, ss.str(), 5.0);
-                p.lastEaglePatternTick = tick;
-                state.vl = 0; // reset local counter after firing
-            }
-        }
-    }
-
+    std::ostringstream ss;
+    ss << "Eagle Bridge (VL: " << (int)state.vl << ") | " << crouchDur
+       << "t crouch | Samples: " << fastSamples << "/5";
+    flag(p, this, ss.str(), 5.0);
+    p.lastEaglePatternTick = tick;
+    state.vl = 0;
   }
 };
 
+// ---------------------------------------------------------------------------
+// Scaffold — bridging backwards faster and steadier than the movement allows.
+// ---------------------------------------------------------------------------
 class ScaffoldCheck : public Check {
 public:
-  ScaffoldCheck() : Check("Scaffold", "Illegal bridging speed/angle.") {}
+  ScaffoldCheck()
+      : Check(CHECK_SCAFFOLD, "Scaffold", "Illegal bridging speed/angle.") {}
+
   void onPlayerTick(PlayerData &p, JNIEnv *, jobject) override {
     if (!Config::isAnticheatScaffoldEnabled())
+      return;
+    if (p.isLocalPlayer && !Config::isAnticheatCheckSelfEnabled())
       return;
     if (p.isRiding)
       return;
     if (p.positions.size() < 5)
       return;
 
-    auto &samples = p.positions;
-    auto &cur = samples[samples.size() - 1];
-    auto &p1 = samples[samples.size() - 2];
-    auto &p2 = samples[samples.size() - 3];
-    auto &p3 = samples[samples.size() - 4];
-    auto &p4 = samples[samples.size() - 5];
+    const size_t n = p.positions.size();
+    // Ring returns by value, so these are copies rather than references.
+    const auto cur = p.positions[n - 1];
+    const auto p1 = p.positions[n - 2];
+    const auto p2 = p.positions[n - 3];
+    const auto p3 = p.positions[n - 4];
+    const auto p4 = p.positions[n - 5];
     long tick = p.currentTick;
 
     double dx = (cur.x - p1.x) * 20.0;
@@ -306,8 +471,7 @@ public:
     double sy = (p1.y - p2.y) * 20.0;
     double accY = 50.0 * ((p1.y - p2.y) - (p3.y - p4.y));
 
-    double moveAngle =
-        std::atan2(dz, dx) * 180.0 / 3.14159265358979323846 - 90.0;
+    double moveAngle = std::atan2(dz, dx) * 180.0 / kPi - 90.0;
     double lookAngle = wrapAngle180(p.rotYaw);
     double diff = std::fmod(moveAngle - lookAngle + 360.0, 360.0);
     if (diff > 180.0)
@@ -367,6 +531,9 @@ Check *makeNoSlow() { return new NoSlowCheck(); }
 Check *makeAutoBlock() { return new AutoBlockCheck(); }
 Check *makeEagle() { return new EagleCheck(); }
 Check *makeScaffold() { return new ScaffoldCheck(); }
+Check *makeKillAura() { return new KillAuraCheck(); }
+Check *makeReach() { return new ReachCheck(); }
+Check *makeVelocity() { return new VelocityCheck(); }
 
 } // namespace Checks
 } // namespace Anticheat

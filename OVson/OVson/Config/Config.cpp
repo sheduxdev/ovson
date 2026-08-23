@@ -165,6 +165,9 @@ static bool g_anticheatNoSlowEnabled = true;
 static bool g_anticheatAutoBlockEnabled = true;
 static bool g_anticheatEagleEnabled = true;
 static bool g_anticheatScaffoldEnabled = true;
+static bool g_anticheatKillAuraEnabled = true;
+static bool g_anticheatReachEnabled = true;
+static bool g_anticheatVelocityEnabled = false;
 static bool g_anticheatCheckSelfEnabled = true;
 static int g_anticheatVl = 5;
 static int g_anticheatCooldownSec = 4;
@@ -658,6 +661,17 @@ bool Config::initialize(HMODULE self) {
   if (!parseJsonBool(all, "anticheatScaffoldEnabled",
                      g_anticheatScaffoldEnabled))
     g_anticheatScaffoldEnabled = true;
+  if (!parseJsonBool(all, "anticheatKillAuraEnabled",
+                     g_anticheatKillAuraEnabled))
+    g_anticheatKillAuraEnabled = true;
+  if (!parseJsonBool(all, "anticheatReachEnabled", g_anticheatReachEnabled))
+    g_anticheatReachEnabled = true;
+  // Off by default: knockback is the noisiest signal we have, since a hit
+  // taken against a wall or while already airborne moves the player very
+  // little on its own.
+  if (!parseJsonBool(all, "anticheatVelocityEnabled",
+                     g_anticheatVelocityEnabled))
+    g_anticheatVelocityEnabled = false;
   if (!parseJsonBool(all, "anticheatCheckSelfEnabled",
                      g_anticheatCheckSelfEnabled))
     g_anticheatCheckSelfEnabled = true;
@@ -786,6 +800,9 @@ static bool saveImpl() {
       "  \"anticheatAutoBlockEnabled\": %s,\n"
       "  \"anticheatEagleEnabled\": %s,\n"
       "  \"anticheatScaffoldEnabled\": %s,\n"
+      "  \"anticheatKillAuraEnabled\": %s,\n"
+      "  \"anticheatReachEnabled\": %s,\n"
+      "  \"anticheatVelocityEnabled\": %s,\n"
       "  \"anticheatCheckSelfEnabled\": %s,\n"
       "  \"anticheatVl\": %d,\n"
       "  \"anticheatCooldownSec\": %d\n"
@@ -861,6 +878,9 @@ static bool saveImpl() {
       g_anticheatAutoBlockEnabled ? "true" : "false",
       g_anticheatEagleEnabled ? "true" : "false",
       g_anticheatScaffoldEnabled ? "true" : "false",
+      g_anticheatKillAuraEnabled ? "true" : "false",
+      g_anticheatReachEnabled ? "true" : "false",
+      g_anticheatVelocityEnabled ? "true" : "false",
       g_anticheatCheckSelfEnabled ? "true" : "false", g_anticheatVl,
       g_anticheatCooldownSec);
   fclose(f);
@@ -1637,6 +1657,25 @@ void Config::setAnticheatEagleEnabled(bool e) {
 bool Config::isAnticheatScaffoldEnabled() { return g_anticheatScaffoldEnabled; }
 void Config::setAnticheatScaffoldEnabled(bool e) {
   g_anticheatScaffoldEnabled = e;
+  save();
+}
+bool Config::isAnticheatKillAuraEnabled() {
+  return g_anticheatKillAuraEnabled;
+}
+void Config::setAnticheatKillAuraEnabled(bool e) {
+  g_anticheatKillAuraEnabled = e;
+  save();
+}
+bool Config::isAnticheatReachEnabled() { return g_anticheatReachEnabled; }
+void Config::setAnticheatReachEnabled(bool e) {
+  g_anticheatReachEnabled = e;
+  save();
+}
+bool Config::isAnticheatVelocityEnabled() {
+  return g_anticheatVelocityEnabled;
+}
+void Config::setAnticheatVelocityEnabled(bool e) {
+  g_anticheatVelocityEnabled = e;
   save();
 }
 bool Config::isAnticheatCheckSelfEnabled() {

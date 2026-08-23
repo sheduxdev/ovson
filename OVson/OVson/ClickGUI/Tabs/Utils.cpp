@@ -359,7 +359,7 @@ void renderUtils(TabCtx &ctx) {
 
 
   drawSectionLabel(cx, cy, "Anticheat", alpha);
-  const float acCardH = 262.0f;
+  const float acCardH = 358.0f;
   bool hAc = isHovered(mx, my, mainX + 190, cy + 30, g_w - 210, acCardH);
   glDisable(GL_TEXTURE_2D);
   drawThemeCard(mainX + 190, cy + 30, g_w - 210, acCardH, hAc, alpha);
@@ -369,7 +369,7 @@ void renderUtils(TabCtx &ctx) {
                        applyAlpha(0xFFFFFFFF, alpha));
   g_guiFont.drawString(
       cx, cy + 58,
-      "Four client-side checks: NoSlow, AutoBlock, Eagle, Scaffold",
+      "Seven client-side checks with combined-evidence scoring",
       applyAlpha(0xFFA0A0A5, alpha), 0.45f);
 
   bool acEnabled = Config::isAnticheatEnabled();
@@ -401,6 +401,12 @@ void renderUtils(TabCtx &ctx) {
        &Config::setAnticheatEagleEnabled, 43},
       {"Scaffold", &Config::isAnticheatScaffoldEnabled,
        &Config::setAnticheatScaffoldEnabled, 44},
+      {"KillAura", &Config::isAnticheatKillAuraEnabled,
+       &Config::setAnticheatKillAuraEnabled, 47},
+      {"Reach", &Config::isAnticheatReachEnabled,
+       &Config::setAnticheatReachEnabled, 48},
+      {"Velocity", &Config::isAnticheatVelocityEnabled,
+       &Config::setAnticheatVelocityEnabled, 49},
       {"Check Self", &Config::isAnticheatCheckSelfEnabled,
        &Config::setAnticheatCheckSelfEnabled, 46},
   };

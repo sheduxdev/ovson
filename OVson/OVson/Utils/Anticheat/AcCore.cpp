@@ -43,6 +43,10 @@ static std::string resolveMapLogPath() {
 }
 
 void mapLog(const char *fmt, ...) {
+  // Opt-in only. This is called from inside the per-player tick loop, and
+  // writing to disk there costs a frame every time.
+  if (!Config::isDebugging())
+    return;
   std::lock_guard<std::mutex> lk(g_mapLogMutex);
   if (!g_mapLog.is_open()) {
     std::string path = resolveMapLogPath();
@@ -1125,7 +1129,7 @@ static std::atomic<bool> g_started{false};
 static std::vector<std::unique_ptr<Check>> g_checks;
 
 void flag(PlayerData &p, Check *check, const std::string &info, double vl) {
-  auto &st = p.checks[check->name()];
+  auto &st = p.checks[check->id()];
 
   ULONGLONG now = GetTickCount64();
   if (st.lastFlagMs > 0) {
@@ -1246,6 +1250,85 @@ void flag(PlayerData &p, Check *check, const std::string &info, double vl) {
   } else {
     ChatSDK::showClientMessage(msg);
   }
+}
+
+// Pairs this tick's attacks with this tick's damage. Minecraft never tells a
+// client who hit whom, so the pairing is inferred: a player who started a
+// swing, a player whose hurt timer just went up, close enough together, and
+// the smallest aiming error among the candidates wins. Everything downstream
+// (aim error, reach distance) is derived from that pairing, so it deliberately
+// refuses ambiguous cases rather than guessing.
+static void resolveCombat() {
+  const double kMaxPairDistance = 7.0;
+
+  for (auto &ea : g_players) {
+    PlayerData &atk = ea.second;
+    if (atk.swingEdgeTick != atk.currentTick)
+      continue;
+
+    double eyeY = atk.posY + 1.62;
+    double yaw = (double)atk.rotYaw;
+    double pitch = (double)atk.rotPitch;
+    double ry = -yaw * 3.14159265358979323846 / 180.0;
+    double rp = -pitch * 3.14159265358979323846 / 180.0;
+    double cp = std::cos(rp);
+    double lookX = std::sin(ry) * cp;
+    double lookY = std::sin(rp);
+    double lookZ = std::cos(ry) * cp;
+
+    const PlayerData *best = nullptr;
+    double bestErr = 1e9, bestDist = 0.0;
+
+    for (auto &ev : g_players) {
+      PlayerData &vic = ev.second;
+      if (vic.entityId == atk.entityId)
+        continue;
+      // Only players who took damage on this tick are candidates.
+      if (!(vic.hurtTime > vic.lastHurtTime && vic.hurtTime > 0))
+        continue;
+
+      double dx = vic.posX - atk.posX;
+      double dy = (vic.posY + 0.9) - eyeY;
+      double dz = vic.posZ - atk.posZ;
+      double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+      if (dist <= 0.0001 || dist > kMaxPairDistance)
+        continue;
+
+      double dot = (dx * lookX + dy * lookY + dz * lookZ) / dist;
+      dot = dot < -1.0 ? -1.0 : (dot > 1.0 ? 1.0 : dot);
+      double errDeg = std::acos(dot) * 180.0 / 3.14159265358979323846;
+
+      if (errDeg < bestErr) {
+        bestErr = errDeg;
+        bestDist = dist;
+        best = &vic;
+      }
+    }
+
+    if (!best)
+      continue;
+
+    atk.lastAttack.valid = true;
+    atk.lastAttack.tick = atk.currentTick;
+    atk.lastAttack.victimEid = best->entityId;
+    atk.lastAttack.distance = bestDist;
+    atk.lastAttack.aimErrorDeg = bestErr;
+    double dYaw = (double)atk.rotYaw - (double)atk.lastRotYaw;
+    while (dYaw > 180.0) dYaw -= 360.0;
+    while (dYaw < -180.0) dYaw += 360.0;
+    atk.lastAttack.yawDeltaBefore = std::fabs(dYaw);
+
+    for (int i = 3; i > 0; --i) {
+      atk.recentVictims[i] = atk.recentVictims[i - 1];
+      atk.recentVictimTicks[i] = atk.recentVictimTicks[i - 1];
+    }
+    atk.recentVictims[0] = best->entityId;
+    atk.recentVictimTicks[0] = atk.currentTick;
+  }
+
+  // Consume this tick's damage edges once the pairing has used them.
+  for (auto &e : g_players)
+    e.second.lastHurtTime = e.second.hurtTime;
 }
 
 static void tickOnce(JNIEnv *env) {
@@ -1399,11 +1482,8 @@ static void tickOnce(JNIEnv *env) {
     p.wasSwingInProgress = p.isSwingInProgress;
     p.wasSneaking = p.isSneaking;
 
-    p.posX = env->GetDoubleField(ent, g_jc.f_posX);
-    p.posY = env->GetDoubleField(ent, g_jc.f_posY);
-    p.posZ = env->GetDoubleField(ent, g_jc.f_posZ);
-    p.rotYaw = env->GetFloatField(ent, g_jc.f_yaw);
-    p.rotPitch = env->GetFloatField(ent, g_jc.f_pitch);
+    p.lastRotYaw = p.rotYaw;
+    p.lastRotPitch = p.rotPitch;
 
     {
       bool swingAny = false;
@@ -1458,6 +1538,10 @@ static void tickOnce(JNIEnv *env) {
       if (swingAny) {
           p.lastSwingTick = tick;
       }
+      p.wasRawSwing = p.rawSwing;
+      p.rawSwing = swingAny;
+      if (p.rawSwing && !p.wasRawSwing)
+        p.swingEdgeTick = tick;
       p.isSwingInProgress = (tick - p.lastSwingTick < 15);
     }
 
@@ -1517,10 +1601,13 @@ static void tickOnce(JNIEnv *env) {
         }
       }
     }
-    p.onGround = env->GetBooleanField(ent, g_jc.f_onGround) == JNI_TRUE;
-    p.isSwingInProgress =
-        env->GetBooleanField(ent, g_jc.f_isSwingInProgress) == JNI_TRUE;
-    p.hurtTime = env->GetIntField(ent, g_jc.f_hurtTime);
+    if (g_jc.f_onGround)
+      p.onGround = env->GetBooleanField(ent, g_jc.f_onGround) == JNI_TRUE;
+    if (g_jc.f_hurtTime) {
+      p.hurtTime = env->GetIntField(ent, g_jc.f_hurtTime);
+      if (env->ExceptionCheck())
+        env->ExceptionClear();
+    }
 
     if (g_jc.f_isSneaking) {
       p.isSneaking = env->GetBooleanField(ent, g_jc.f_isSneaking) == JNI_TRUE;
@@ -1706,6 +1793,12 @@ static void tickOnce(JNIEnv *env) {
         }
 
         if (g_jc.m_isSprinting) p.isSprinting = env->CallBooleanMethod(ent, g_jc.m_isSprinting) == JNI_TRUE;
+        if (g_jc.m_isRiding) {
+          p.isRiding = env->CallBooleanMethod(ent, g_jc.m_isRiding) == JNI_TRUE;
+          if (env->ExceptionCheck()) env->ExceptionClear();
+        }
+        p.pushPosition(p.posX, p.posY, p.posZ);
+        p.havePos = true;
         if (p.isSwingInProgress) p.lastSwingTick = tick;
 
         p.heldItemId = 0;
@@ -1737,6 +1830,8 @@ static void tickOnce(JNIEnv *env) {
 
 
 
+    resolveCombat();
+
     for (auto it = g_players.begin(); it != g_players.end();) {
         if (seen.find(it->first) == seen.end())
             it = g_players.erase(it);
@@ -1763,10 +1858,13 @@ void initialize() {
   g_checks.emplace_back(Checks::makeAutoBlock());
   g_checks.emplace_back(Checks::makeEagle());
   g_checks.emplace_back(Checks::makeScaffold());
+  g_checks.emplace_back(Checks::makeKillAura());
+  g_checks.emplace_back(Checks::makeReach());
+  g_checks.emplace_back(Checks::makeVelocity());
 
-  debugLog(
-      "initialize: %d checks loaded — NoSlow AutoBlock Eagle Scaffold",
-      (int)g_checks.size());
+  debugLog("initialize: %d checks loaded — NoSlow AutoBlock Eagle Scaffold "
+           "KillAura Reach Velocity",
+           (int)g_checks.size());
   debugLog("initialize: config master=%d noslow=%d autoblock=%d eagle=%d "
            "scaffold=%d vl=%d cooldown=%d",
            (int)Config::isAnticheatEnabled(),

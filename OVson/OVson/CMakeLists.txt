@@ -317,6 +317,20 @@ if(OVSON_BUILD_TESTS AND BUILD_TESTING)
     endif()
     add_test(NAME OVson.Bedwars COMMAND OVsonBedwarsTests)
 
+    # Header-only: the scoring rules pull in nothing from the client.
+    add_executable(OVsonAnticheatTests
+        Utils/Anticheat/AcModels.h
+        Utils/Anticheat/AcStats.h
+        tests/AnticheatTests.cpp
+    )
+    target_include_directories(OVsonAnticheatTests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    if(MSVC)
+        target_compile_options(OVsonAnticheatTests PRIVATE /W4)
+    endif()
+    add_test(NAME OVson.Anticheat COMMAND OVsonAnticheatTests)
+
     add_executable(OVsonBlockHitHeuristicTests
         Logic/BlockHitHeuristic.cpp
         Logic/BlockHitHeuristic.h
