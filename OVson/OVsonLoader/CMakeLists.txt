@@ -26,9 +26,13 @@ endif()
 # carry the GDI+ loader history if you want to look back.
 add_executable(OVsonLoader WIN32
     slint_ui/main.cpp
+    slint_ui/crash_dumps.cpp
     slint_ui/injector.cpp
+    slint_ui/log_tail.cpp
     slint_ui/process_scan.cpp
+    slint_ui/settings.cpp
     slint_ui/shutdown_coordinator.cpp
+    slint_ui/tray_icon.cpp
     slint_ui/updater.cpp
     OVsonLoader.rc
 )
@@ -43,8 +47,38 @@ slint_target_sources(OVsonLoader slint_ui/ovson_ui.slint)
 # machine; embed-files bakes the bytes into the executable instead.
 set_property(TARGET OVsonLoader PROPERTY SLINT_EMBED_RESOURCES embed-files)
 
+# OVsonLoader.rc embeds five RCDATA payloads: the OVson.dll that gets injected,
+# the Slint runtime the loader drops next to itself, and three documents. Two of
+# them only exist once their producing target has linked, so stage the whole set
+# into one directory and hand that directory to the resource compiler. The .rc
+# then names them plainly and needs no knowledge of the build layout.
+set(OVSON_RCDATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/rcdata")
+set(OVSON_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+
+configure_file("${OVSON_REPO_ROOT}/LICENSE"
+               "${OVSON_RCDATA_DIR}/LICENSE.txt" COPYONLY)
+configure_file("${OVSON_REPO_ROOT}/README.md"
+               "${OVSON_RCDATA_DIR}/readme_embed.txt" COPYONLY)
+configure_file("${OVSON_REPO_ROOT}/CHANGES_FOR_UPSTREAM.md"
+               "${OVSON_RCDATA_DIR}/changelog_embed.txt" COPYONLY)
+
+add_custom_command(
+    OUTPUT "${OVSON_RCDATA_DIR}/OVson.dll" "${OVSON_RCDATA_DIR}/slint_cpp.dll"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:OVson> "${OVSON_RCDATA_DIR}/OVson.dll"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${SLINT_INSTALL_ROOT}/lib/slint_cpp.dll"
+            "${OVSON_RCDATA_DIR}/slint_cpp.dll"
+    DEPENDS OVson "${SLINT_INSTALL_ROOT}/lib/slint_cpp.dll"
+    COMMENT "Staging OVsonLoader's RCDATA payloads"
+    VERBATIM)
+add_custom_target(OVsonLoaderRcData
+    DEPENDS "${OVSON_RCDATA_DIR}/OVson.dll" "${OVSON_RCDATA_DIR}/slint_cpp.dll")
+add_dependencies(OVsonLoader OVsonLoaderRcData)
+
 target_include_directories(OVsonLoader PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/slint_ui
+    ${OVSON_RCDATA_DIR}
 )
 
 # Block the Windows <minwindef.h> min/max macros — they collide with
@@ -59,7 +93,15 @@ target_link_libraries(OVsonLoader PRIVATE
     Slint::Slint
     User32.lib
     Shell32.lib
+    delayimp.lib
 )
+
+# main.cpp writes the embedded slint_cpp.dll (RCDATA 2) to %TEMP% and
+# LoadLibrary's it before the first Slint call. That only buys anything if the
+# import is delay-loaded: a normal import is resolved by the OS loader before
+# wWinMain runs, so the exe would refuse to start with 0xC0000135 unless the
+# DLL happened to sit next to it. With this the executable is self-contained.
+target_link_options(OVsonLoader PRIVATE /DELAYLOAD:slint_cpp.dll)
 
 set_target_properties(OVsonLoader PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"

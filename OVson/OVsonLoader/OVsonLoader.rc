@@ -1,9 +1,11 @@
 #include <windows.h>
 
 101 ICON "ovson_logo.ico"
-1 RCDATA "..\\x64\\Release\\OVson.dll"
+// Staged into ${CMAKE_CURRENT_BINARY_DIR}/rcdata by OVsonLoader/CMakeLists.txt,
+// which puts that directory on the resource compiler's include path.
+1 RCDATA "OVson.dll"
 2 RCDATA "slint_cpp.dll"
-3 RCDATA "..\\LICENSE.txt"
+3 RCDATA "LICENSE.txt"
 4 RCDATA "readme_embed.txt"
 5 RCDATA "changelog_embed.txt"
 

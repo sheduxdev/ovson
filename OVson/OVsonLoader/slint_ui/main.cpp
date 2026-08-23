@@ -521,7 +521,8 @@ int APIENTRY wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int) {
     return 0;
   }
 
-  HRSRC resSlint = FindResourceW(nullptr, MAKEINTRESOURCEW(2), RT_RCDATA);
+  HRSRC resSlint =
+      FindResourceW(nullptr, MAKEINTRESOURCEW(2), MAKEINTRESOURCEW(10));
   if (resSlint) {
     HGLOBAL hSlint = LoadResource(nullptr, resSlint);
     DWORD szSlint = SizeofResource(nullptr, resSlint);
