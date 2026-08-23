@@ -436,7 +436,7 @@ void renderSettings(TabCtx &ctx) {
   drawThemeButton(cx, cy, saveBtnW, 35, hover, false, alpha);
   glEnable(GL_TEXTURE_2D);
 
-  std::string saveText = "SAVE CONFIG";
+  std::string saveText = "Save config";
   float saveTextX =
       cx + (saveBtnW - g_guiFont.getStringWidth(saveText)) / 2.0f;
   g_guiFont.drawString(saveTextX, cy + 4, saveText,

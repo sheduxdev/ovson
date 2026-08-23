@@ -1716,15 +1716,14 @@ void ClickGUI::render(HDC hdc) {
   drawThemeSidebar(mainX, mainY, sidebarW, g_h, s_animAlpha);
 
   RenderUtils::drawRect(mainX + sidebarW, mainY + 60, g_w - sidebarW, 1,
-                        applyAlpha(0x18FFFFFF, s_animAlpha));
+                        applyAlpha(ClickGUITheme::border(), s_animAlpha));
 
   {
     float lmX = mainX + 16.0f, lmY = mainY + 15.0f, lmS = 30.0f;
     glDisable(GL_TEXTURE_2D);
-    RenderUtils::drawGlow(lmX, lmY, lmS, lmS, 8.0f, accent(), 0.22f * s_animAlpha);
-    RenderUtils::drawRoundedRect(lmX, lmY, lmS, lmS, 8.0f, accent(), s_animAlpha);
-    RenderUtils::drawRoundedRect(lmX + 3, lmY + 2, lmS - 6, lmS * 0.45f, 6.0f,
-                                 0xFFFFFFFF, 0.12f * s_animAlpha);
+    RenderUtils::drawRoundedRect(lmX, lmY, lmS, lmS,
+                                 ClickGUITheme::buttonRadius(), accent(),
+                                 s_animAlpha);
     glEnable(GL_TEXTURE_2D);
     float oW = g_guiFont.getStringWidth("O");
     g_guiFont.drawString(lmX + lmS * 0.5f - oW * 0.5f + 1.0f, lmY + 4.0f, "O",
@@ -1786,8 +1785,10 @@ void ClickGUI::render(HDC hdc) {
     if (ClickGUITheme::style() == ClickGUITheme::Style::LiquidGlass) {
       Render::LiquidGlass::drawRect(closeX, closeY, closeSize, closeSize, 8.0f, s_animAlpha, hovClose ? 0xFFE03A4F : 0x00000000);
     } else {
-      DWORD bg = hovClose ? 0xFFE03A4F : 0x15FFFFFF;
-      RenderUtils::drawRoundedRect(closeX, closeY, closeSize, closeSize, 8.0f, applyAlpha(bg, s_animAlpha), -1.0f);
+      DWORD bg = hovClose ? ClickGUITheme::surface2() : 0x00000000;
+      RenderUtils::drawRoundedRect(closeX, closeY, closeSize, closeSize,
+                                   ClickGUITheme::buttonRadius(),
+                                   applyAlpha(bg, s_animAlpha), -1.0f);
     }
     glEnable(GL_TEXTURE_2D);
 
@@ -1864,9 +1865,10 @@ void ClickGUI::render(HDC hdc) {
                                           21.0f, 0.8f * s_tabHov[i] * s_animAlpha,
                                           ClickGUITheme::cardHover());
         } else {
-            DWORD hb = ClickGUITheme::surface2();
+            DWORD hb = ClickGUITheme::surface1();
             RenderUtils::drawRoundedRect(
-                mainX + 12, ty - 10, sidebarW - 24, 42, 21.0f, hb,
+                mainX + 12, ty - 10, sidebarW - 24, 42,
+                ClickGUITheme::pillRadius(), hb,
                 (((hb >> 24) & 0xFF) / 255.0f) * s_tabHov[i] * s_animAlpha);
         }
         glEnable(GL_TEXTURE_2D);
@@ -1898,19 +1900,22 @@ void ClickGUI::render(HDC hdc) {
     float cW = segW / 2.0f;
     glDisable(GL_TEXTURE_2D);
     DWORD gbg = ClickGUITheme::surface1();
-    RenderUtils::drawRoundedRect(segX, segY, segW, segH, 8.0f, gbg,
+    RenderUtils::drawRoundedRect(segX, segY, segW, segH,
+                                 ClickGUITheme::buttonRadius(), gbg,
                                  (((gbg >> 24) & 0xFF) / 255.0f) * s_animAlpha);
     DWORD gbd = ClickGUITheme::hairline();
-    RenderUtils::drawRoundedOutline(segX, segY, segW, segH, 8.0f, 1.0f, gbd,
+    RenderUtils::drawRoundedOutline(segX, segY, segW, segH,
+                                    ClickGUITheme::buttonRadius(), 1.0f, gbd,
                                     (((gbd >> 24) & 0xFF) / 255.0f) * s_animAlpha);
     for (int i = 0; i < 2; ++i) {
       float chX = segX + i * cW;
       bool sel = (cur == lyLbl[i]) || (i == 0 && cur != "B");
       bool hov = isHovered(mx, my, chX, segY, cW, segH);
       if (sel) {
-        DWORD soft = ClickGUITheme::accentSoft();
+        DWORD soft = ClickGUITheme::cardHover();
         RenderUtils::drawRoundedRect(chX + 2.0f, segY + 2.0f, cW - 4.0f,
-                                     segH - 4.0f, 6.0f, soft,
+                                     segH - 4.0f, ClickGUITheme::chipRadius(),
+                                     soft,
                                      (((soft >> 24) & 0xFF) / 255.0f) * s_animAlpha);
       }
       glEnable(GL_TEXTURE_2D);
@@ -1933,10 +1938,12 @@ void ClickGUI::render(HDC hdc) {
     float cW = segW / 3.0f;
     glDisable(GL_TEXTURE_2D);
     DWORD gbg = ClickGUITheme::surface1();
-    RenderUtils::drawRoundedRect(segX, segY, segW, segH, 8.0f, gbg,
+    RenderUtils::drawRoundedRect(segX, segY, segW, segH,
+                                 ClickGUITheme::buttonRadius(), gbg,
                                  (((gbg >> 24) & 0xFF) / 255.0f) * s_animAlpha);
     DWORD gbd = ClickGUITheme::hairline();
-    RenderUtils::drawRoundedOutline(segX, segY, segW, segH, 8.0f, 1.0f, gbd,
+    RenderUtils::drawRoundedOutline(segX, segY, segW, segH,
+                                    ClickGUITheme::buttonRadius(), 1.0f, gbd,
                                     (((gbd >> 24) & 0xFF) / 255.0f) * s_animAlpha);
     for (int i = 0; i < 3; ++i) {
       float chX = segX + i * cW;
@@ -1944,16 +1951,11 @@ void ClickGUI::render(HDC hdc) {
                  (i == 0 && cur != "LiquidGlass" && cur != "Minimal");
       bool hov = isHovered(mx, my, chX, segY, cW, segH);
       if (sel) {
-        RenderUtils::drawGlow(chX + 2.0f, segY + 2.0f, cW - 4.0f, segH - 4.0f,
-                              6.0f, accent(), 0.12f * s_animAlpha);
-        DWORD soft = ClickGUITheme::accentSoft();
+        DWORD soft = ClickGUITheme::cardHover();
         RenderUtils::drawRoundedRect(chX + 2.0f, segY + 2.0f, cW - 4.0f,
-                                     segH - 4.0f, 6.0f, soft,
+                                     segH - 4.0f, ClickGUITheme::chipRadius(),
+                                     soft,
                                      (((soft >> 24) & 0xFF) / 255.0f) * s_animAlpha);
-        DWORD sbd = ClickGUITheme::accentBorder();
-        RenderUtils::drawRoundedOutline(chX + 2.0f, segY + 2.0f, cW - 4.0f,
-                                        segH - 4.0f, 6.0f, 1.0f, sbd,
-                                        (((sbd >> 24) & 0xFF) / 255.0f) * s_animAlpha);
       }
       glEnable(GL_TEXTURE_2D);
       DWORD tc = sel ? accent() : (hov ? 0xFFFFFFFF : textSecondary());

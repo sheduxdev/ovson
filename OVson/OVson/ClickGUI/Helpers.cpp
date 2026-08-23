@@ -124,21 +124,20 @@ void drawSwitch(int id, float x, float y, bool enabled, bool hovered,
     return;
   }
 
-  w = 44.0f;
-  h = 25.0f;
+  w = 36.0f;
+  h = 20.0f;
   const float r = h * 0.5f;
-  if (t > 0.01f)
-    RenderUtils::drawGlow(x, y, w, h, r, accent(), 0.22f * t * alpha);
   DWORD track = RenderUtils::lerpColor(surface2(), accent(), t);
+  if (hovered)
+    track = RenderUtils::lerpColor(track, 0xFFFFFFFF, 0.06f);
   RenderUtils::drawRoundedRect(x, y, w, h, r, track, colorA(track) * alpha);
-  DWORD bd = RenderUtils::lerpColor(hairlineStrong(), 0xFF5E86F7, t);
-  RenderUtils::drawRoundedOutline(x, y, w, h, r, 1.0f, bd,
-                                  colorA(bd) * (0.5f + 0.3f * (1.0f - t)) * alpha);
-  const float knobR = 9.5f;
-  float kcx = x + 2.0f + t * 21.0f + knobR;
+
+  // Knob goes dark once the track lights up, the way white-on-white would not.
+  const float knobR = 8.0f;
+  float kcx = x + 2.0f + t * (w - h) + knobR;
   float kcy = y + h * 0.5f;
-  RenderUtils::drawCircle(kcx, kcy + 1.5f, knobR, 0x55000000, 0.6f * alpha);
-  RenderUtils::drawCircle(kcx, kcy, knobR, 0xFFFFFFFF, alpha);
+  DWORD knob = RenderUtils::lerpColor(textSecondary(), panelBg(), t);
+  RenderUtils::drawCircle(kcx, kcy, knobR, knob, alpha);
 }
 
 bool drawSlider(int id, float x, float y, float w, float h, float &val, float minVal, float maxVal, float mx, float my, bool lClick, float alpha) {
@@ -166,15 +165,14 @@ bool drawSlider(int id, float x, float y, float w, float h, float &val, float mi
     RenderUtils::drawCircle(kx, y + h/2.0f, knobR, 0xFFFFFFFF, alpha);
   } else {
     using namespace ClickGUITheme;
-    RenderUtils::drawRoundedRect(x, y + h/2.0f - 1.5f, w, 3.0f, 1.5f,
-                                 0xFF202025, alpha * 0.7f);
+    RenderUtils::drawRoundedRect(x, y + h/2.0f - 2.0f, w, 4.0f, 2.0f,
+                                 surface2(), alpha);
     if (w * pct > 0.5f) {
-      RenderUtils::drawRoundedRect(x, y + h/2.0f - 1.5f, w * pct, 3.0f, 1.5f,
+      RenderUtils::drawRoundedRect(x, y + h/2.0f - 2.0f, w * pct, 4.0f, 2.0f,
                                    accent(), alpha);
     }
     float kx = x + w * pct;
-    RenderUtils::drawCircle(kx, y + h/2.0f + 0.5f, 6.0f, 0x44000000, 0.5f * alpha);
-    RenderUtils::drawCircle(kx, y + h/2.0f, 6.0f, 0xFFFFFFFF, alpha);
+    RenderUtils::drawCircle(kx, y + h/2.0f, 7.0f, textPrimary(), alpha);
   }
   
   return interacting;
@@ -200,20 +198,6 @@ void drawThemePanel(float x, float y, float w, float h, float alpha) {
   RenderUtils::drawRoundedRect(x - 1, y - 1, w + 2, h + 2, r,
                                 bd, colorA(bd) * alpha);
   RenderUtils::drawRoundedRect(x, y, w, h, r, bg, colorA(bg) * alpha);
-
-  float t = (float)GetTickCount64() / 1000.0f;
-  float ph1 = (sinf(t / 2.6f) + 1.0f) * 0.5f;
-  float ph2 = (sinf(t / 3.4f + 2.0f) + 1.0f) * 0.5f;
-  float ph3 = (sinf(t / 4.1f + 4.0f) + 1.0f) * 0.5f;
-  RenderUtils::drawRadialGlow(x + w * 0.85f, y + h * 0.82f, h * 1.2f,
-                              RenderUtils::lerpColor(0xFF8A5BE8, 0xFFB44DE0, ph1),
-                              0.40f * alpha);
-  RenderUtils::drawRadialGlow(x + w * 0.12f, y + h * 0.18f, h * 0.8f,
-                              RenderUtils::lerpColor(0xFF4D6FE0, 0xFF5B8AF0, ph2),
-                              0.28f * alpha);
-  RenderUtils::drawRadialGlow(x + w * 0.45f, y + h * 1.02f, h * 0.95f,
-                              RenderUtils::lerpColor(0xFFD8559E, 0xFF8A5BE8, ph3),
-                              0.20f * alpha);
 }
 
 void drawThemeSidebar(float x, float y, float w, float h, float alpha) {
@@ -253,12 +237,6 @@ void drawThemeCard(float x, float y, float w, float h, bool hovered,
   RenderUtils::drawRoundedRect(x, y, w, h, r, fill, colorA(fill) * alpha);
   DWORD bd = RenderUtils::lerpColor(hairline(), hairlineStrong(), strip);
   RenderUtils::drawRoundedOutline(x, y, w, h, r, 1.0f, bd, colorA(bd) * alpha);
-  if (strip > 0.01f) {
-    RenderUtils::drawGlow(x + 3.0f, y + 9.0f, 3.0f, h - 18.0f, 1.5f, accent(),
-                          0.18f * strip * alpha);
-    RenderUtils::drawRoundedRect(x + 3.0f, y + 9.0f, 3.0f, h - 18.0f, 1.5f,
-                                 accent(), strip * alpha);
-  }
 }
 
 void drawThemeButton(float x, float y, float w, float h, bool hovered,
@@ -282,11 +260,8 @@ void drawThemeButton(float x, float y, float w, float h, bool hovered,
 }
 
 void drawSectionLabel(float x, float y, const std::string &text, float alpha) {
-  std::string up = text;
-  for (auto &c : up)
-    if (c >= 'a' && c <= 'z') c = (char)(c - 32);
   ClickGUIState::g_guiFont.drawString(
-      x, y, up, applyAlpha(ClickGUITheme::textMuted(), alpha), 0.38f);
+      x, y, text, applyAlpha(ClickGUITheme::textMuted(), alpha), 0.40f);
 }
 
 void drawChevron(float ccx, float ccy, float s, bool open, uint32_t col,
@@ -342,39 +317,19 @@ void drawThemeTabIndicator(float x, float y, float w, float h, float alpha) {
     return;
   }
   const float pr = pillRadius();
-  RenderUtils::drawGlow(x, y, w, h, pr, accent(), 0.16f * alpha);
-  DWORD soft = accentSoft();
-  RenderUtils::drawRoundedRect(x, y, w, h, pr, soft, colorA(soft) * alpha);
-  DWORD bdc = accentBorder();
-  RenderUtils::drawRoundedOutline(x, y, w, h, pr, 1.0f, bdc, colorA(bdc) * alpha);
-  RenderUtils::drawRoundedRect(x + 6.0f, y + 8.0f, 3.0f, h - 16.0f, 1.5f,
-                               accent(), alpha);
-  RenderUtils::drawRoundedRect(x + 4.0f, y + 1.0f, w - 8.0f, 1.0f, 0.5f,
-                               0xFFFFFFFF, 0.15f * alpha);
+  DWORD fill = cardHover();
+  RenderUtils::drawRoundedRect(x, y, w, h, pr, fill, colorA(fill) * alpha);
 }
 
 void drawThemeBackground(float screenW, float screenH, float alpha) {
   using namespace ClickGUITheme;
   if (style() == Style::LiquidGlass)
     return;
-
-  float t = (float)GetTickCount64() / 1000.0f;
-  float ph1 = (sinf(t / 3.0f) + 1.0f) * 0.5f;
-  float ph2 = (sinf(t / 3.8f + 2.0f) + 1.0f) * 0.5f;
-  float ph3 = (sinf(t / 4.6f + 4.0f) + 1.0f) * 0.5f;
-
-  RenderUtils::drawRadialGlow(screenW * 0.92f, screenH * 0.46f, screenH * 1.35f,
-                              RenderUtils::lerpColor(0xFF8A5BE8, 0xFFB44DE0, ph1),
-                              0.32f * alpha);
-  RenderUtils::drawRadialGlow(screenW * 0.05f, screenH * 0.30f, screenH * 1.15f,
-                              RenderUtils::lerpColor(0xFF4D6FE0, 0xFF5B8AF0, ph2),
-                              0.24f * alpha);
-  RenderUtils::drawRadialGlow(screenW * 0.78f, screenH * 1.05f, screenH * 1.05f,
-                              RenderUtils::lerpColor(0xFFD8559E, 0xFF8A5BE8, ph3),
-                              0.18f * alpha);
-  RenderUtils::drawRadialGlow(screenW * 1.02f, screenH * 0.12f, screenH * 0.85f,
-                              RenderUtils::lerpColor(0xFFB44DE0, 0xFF8A5BE8, ph1),
-                              0.16f * alpha);
+  // One flat scrim. It does the job the four animated gradients were doing --
+  // separating the panel from whatever is happening in the game behind it --
+  // for a single quad instead of four screen-sized ones per frame. Kept light
+  // enough that the game is still readable behind an open menu.
+  RenderUtils::drawRect(0.0f, 0.0f, screenW, screenH, 0xFF000000, 0.45f * alpha);
 }
 
 } // namespace ClickGUIHelpers

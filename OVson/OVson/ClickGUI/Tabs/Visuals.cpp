@@ -252,12 +252,12 @@ void renderVisuals(TabCtx &ctx) {
 
         glDisable(GL_TEXTURE_2D);
         if (en) {
-          RenderUtils::drawGlow(x, y, w, chipH, 9.0f, ClickGUITheme::accent(),
-                                (dragging ? 0.5f : 0.30f) * alpha);
-          RenderUtils::drawRoundedRect(x, y, w, chipH, 9.0f,
-                                       ClickGUITheme::accent(), 0.92f * alpha);
+          RenderUtils::drawRoundedRect(x, y, w, chipH,
+                                       ClickGUITheme::chipRadius(),
+                                       ClickGUITheme::accent(), alpha);
           if (dragging || hov)
-            RenderUtils::drawRoundedOutline(x, y, w, chipH, 9.0f, 1.5f,
+            RenderUtils::drawRoundedOutline(x, y, w, chipH,
+                                            ClickGUITheme::chipRadius(), 1.0f,
                                             0xFFFFFFFF,
                                             (dragging ? 0.85f : 0.35f) * alpha);
         } else {
@@ -408,7 +408,7 @@ void renderVisuals(TabCtx &ctx) {
 
     {
       float cY = paneY;
-      g_guiFont.drawString(leftX + cPad, cY + 8, "SORT COLUMN",
+      g_guiFont.drawString(leftX + cPad, cY + 8, "Sort column",
                            applyAlpha(0xFF9AA0B0, alpha), 0.35f);
       float dX = leftX + cPad, dY = cY + 28, dW = leftW - 2 * cPad;
       bool hD = isHovered(mx, my, dX, dY, dW, idH);
@@ -429,7 +429,7 @@ void renderVisuals(TabCtx &ctx) {
 
     {
       float cY = paneY + cardH + cGap;
-      g_guiFont.drawString(leftX + cPad, cY + 8, "SORT ORDER",
+      g_guiFont.drawString(leftX + cPad, cY + 8, "Sort order",
                            applyAlpha(0xFF9AA0B0, alpha), 0.35f);
       float dX = leftX + cPad, dY = cY + 28, dW = leftW - 2 * cPad;
       bool hD = isHovered(mx, my, dX, dY, dW, idH);
@@ -451,7 +451,7 @@ void renderVisuals(TabCtx &ctx) {
 
     {
       float cY = paneY + 2 * (cardH + cGap);
-      g_guiFont.drawString(leftX + cPad, cY + 8, "TAB DISPLAY",
+      g_guiFont.drawString(leftX + cPad, cY + 8, "Tab display",
                            applyAlpha(0xFF9AA0B0, alpha), 0.35f);
       float dX = leftX + cPad, dY = cY + 28, dW = leftW - 2 * cPad;
       bool hD = isHovered(mx, my, dX, dY, dW, idH);

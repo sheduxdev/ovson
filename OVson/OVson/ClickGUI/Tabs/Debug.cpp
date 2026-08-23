@@ -91,7 +91,7 @@ void renderDebug(TabCtx &ctx) {
   drawThemeButton(cx, cy, 200, 35, hTest, false, alpha);
   glEnable(GL_TEXTURE_2D);
 
-  std::string testText = "SEND TEST TOAST";
+  std::string testText = "Send test toast";
   float testTextX = cx + (200.0f - g_guiFont.getStringWidth(testText)) / 2.0f;
   g_guiFont.drawString(testTextX, cy + 4, testText,
                        applyAlpha(0xFFFFFFFF, alpha));
@@ -107,7 +107,7 @@ void renderDebug(TabCtx &ctx) {
   drawThemeButton(cx, cy, 200, 35, hClear, false, alpha);
   glEnable(GL_TEXTURE_2D);
 
-  std::string clearText = "CLEAR CACHE";
+  std::string clearText = "Clear cache";
   float clearTextX =
       cx + (200.0f - g_guiFont.getStringWidth(clearText)) / 2.0f;
   g_guiFont.drawString(clearTextX, cy + 4, clearText,
