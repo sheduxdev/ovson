@@ -29,22 +29,24 @@ export struct PRow {
 }
 
 global Palette {
-    out property <color> bg:           #0a0a0d;
-    out property <color> panel:        #131319;
-    out property <color> card:         #17181e;
-    out property <color> card-hover:   #1e1f26;
-    out property <color> card-select:  #21232c;
-    out property <color> card-inj:     #122520;
-    out property <color> border:       #20212a;
-    out property <color> border-hover: #38394044;
-    out property <color> accent:       #5eead4;
-    out property <color> accent-dim:   #2d6e62;
-    out property <color> text:         #f6f7fa;
-    out property <color> text-dim:     #a1a1aa;
+    // shadcn "new-york" dark, zinc scale
+    out property <color> bg:           #09090b;   // background
+    out property <color> panel:        #0c0c0e;   // muted surface
+    out property <color> card:         #101012;   // card
+    out property <color> card-hover:   #18181b;   // accent / hover
+    out property <color> card-select:  #1f1f23;   // selected
+    out property <color> card-inj:     #101012;
+    out property <color> border:       #27272a;   // border / input
+    out property <color> border-hover: #3f3f46;   // ring
+    out property <color> accent:       #fafafa;   // primary
+    out property <color> accent-dim:   #27272a;   // secondary
+    out property <color> text:         #fafafa;   // foreground
+    out property <color> text-dim:     #a1a1aa;   // muted-foreground
     out property <color> text-muted:   #71717a;
-    out property <color> success:      #10b981;
+    out property <color> success:      #22c55e;
+    out property <color> success-dim:  #166534;
     out property <color> error-c:      #ef4444;
-    out property <color> disabled:     #3b3d44;
+    out property <color> disabled:     #27272a;
 }
 
 component InfoChip inherits Rectangle {
@@ -66,7 +68,7 @@ component InfoChip inherits Rectangle {
             text: root.label;
             color: filled ? Palette.bg : accent;
             font-size: 10px;
-            font-weight: 600;
+            font-weight: 500;
             vertical-alignment: center;
         }
     }
@@ -78,8 +80,8 @@ component ProcessCard inherits Rectangle {
     callback uninject-clicked();
     callback right-clicked();
 
-    height: 92px;
-    border-radius: 10px;
+    height: 84px;
+    border-radius: 8px;
     border-width: 1px;
 
     background: data.injected      ? Palette.card-inj
@@ -88,8 +90,8 @@ component ProcessCard inherits Rectangle {
                                    : Palette.card;
     animate background { duration: 160ms; easing: ease-out; }
 
-    border-color: data.injected ? Palette.accent-dim
-                : data.selected ? Palette.accent
+    border-color: data.injected ? Palette.success-dim
+                : data.selected ? Palette.border-hover
                                 : Palette.border;
     animate border-color { duration: 160ms; easing: ease-out; }
 
@@ -147,8 +149,8 @@ component ProcessCard inherits Rectangle {
             Text {
                 text: data.title;
                 color: Palette.text;
-                font-size: 15px;
-                font-weight: 600;
+                font-size: 14px;
+                font-weight: 500;
                 overflow: elide;
             }
             Text {
@@ -194,11 +196,11 @@ component ProcessCard inherits Rectangle {
             width: 100px;
 
             if data.injected: Rectangle {
-                height: 30px;
+                height: 28px;
                 border-radius: 6px;
                 border-width: 1px;
-                background: uninject-touch.has-hover ? #2a1a1a : #1e1418;
-                border-color: uninject-touch.has-hover ? Palette.error-c : #3a2020;
+                background: uninject-touch.has-hover ? Palette.card-hover : transparent;
+                border-color: uninject-touch.has-hover ? Palette.error-c : Palette.border;
                 animate background, border-color { duration: 140ms; easing: ease-out; }
 
                 uninject-touch := TouchArea {
@@ -207,10 +209,10 @@ component ProcessCard inherits Rectangle {
                 }
 
                 Text {
-                    text: "UNINJECT";
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: uninject-touch.has-hover ? Palette.error-c : #cc6666;
+                    text: "Uninject";
+                    font-size: 11px;
+                    font-weight: 500;
+                    color: uninject-touch.has-hover ? Palette.error-c : Palette.text-dim;
                     x: (parent.width - self.width) / 2;
                     y: (parent.height - self.height) / 2;
                     animate color { duration: 140ms; }
@@ -219,7 +221,7 @@ component ProcessCard inherits Rectangle {
 
             if !data.injected && (data.working || data.finished-ok || data.finished-fail): Rectangle {
                 height: 6px;
-                background: #28282f;
+                background: Palette.border;
                 border-radius: 3px;
 
                 Rectangle {
@@ -243,14 +245,14 @@ component PrimaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 44px;
+    height: 40px;
     width: 320px;
-    border-radius: 10px;
+    border-radius: 6px;
 
     background: !enabled            ? Palette.disabled
-              : touch.pressed       ? #cbcdd2
-              : touch.has-hover     ? #ffffff
-                                    : #ebecf0;
+              : touch.pressed       ? #d4d4d8
+              : touch.has-hover     ? #e4e4e7
+                                    : Palette.accent;
     animate background { duration: 130ms; easing: ease-out; }
 
     touch := TouchArea {
@@ -264,7 +266,7 @@ component PrimaryButton inherits Rectangle {
         y: (parent.height - self.height) / 2;
         text: label;
         font-size: 14px;
-        font-weight: 600;
+        font-weight: 500;
         color: enabled ? Palette.bg : Palette.text-muted;
         animate color { duration: 160ms; }
     }
@@ -275,12 +277,12 @@ component NavButton inherits Rectangle {
     in property <bool>   active: false;
     callback clicked();
 
-    height: 26px;
-    width: 78px;
+    height: 30px;
+    width: 76px;
     border-radius: 6px;
 
-    background: active           ? Palette.card-select
-              : touch.has-hover  ? Palette.card-hover
+    background: active           ? Palette.card-hover
+              : touch.has-hover  ? Palette.panel
                                  : transparent;
     animate background { duration: 140ms; easing: ease-out; }
 
@@ -293,9 +295,9 @@ component NavButton inherits Rectangle {
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         text: label;
-        color: active ? Palette.accent : Palette.text-dim;
-        font-size: 11px;
-        font-weight: active ? 700 : 600;
+        color: active ? Palette.text : Palette.text-muted;
+        font-size: 12px;
+        font-weight: 500;
         animate color { duration: 140ms; }
     }
 }
@@ -324,7 +326,7 @@ component AboutPage inherits Rectangle {
             text: "OVson";
             color: Palette.text;
             font-size: 28px;
-            font-weight: 800;
+            font-weight: 600;
             horizontal-alignment: center;
         }
         Text {
@@ -363,7 +365,7 @@ component AboutPage inherits Rectangle {
                     text: "GitHub";
                     color: Palette.text;
                     font-size: 11px;
-                    font-weight: 600;
+                    font-weight: 500;
                 }
             }
         }
@@ -396,7 +398,7 @@ component LogsPage inherits Rectangle {
                     text: "Live log";
                     color: Palette.text;
                     font-size: 20px;
-                    font-weight: 700;
+                    font-weight: 600;
                 }
                 Text {
                     text: log-path != "" ? log-path : "Waiting for an injected session…";
@@ -423,7 +425,7 @@ component LogsPage inherits Rectangle {
                     text: "Open folder";
                     color: Palette.text-dim;
                     font-size: 10px;
-                    font-weight: 600;
+                    font-weight: 500;
                 }
             }
             Rectangle {
@@ -444,13 +446,13 @@ component LogsPage inherits Rectangle {
                     text: "Clear";
                     color: Palette.text-dim;
                     font-size: 10px;
-                    font-weight: 600;
+                    font-weight: 500;
                 }
             }
         }
 
         Rectangle {
-            background: #0d0d11;
+            background: Palette.panel;
             border-radius: 8px;
             border-width: 1px;
             border-color: Palette.border;
@@ -491,8 +493,8 @@ component Toggle inherits Rectangle {
 
     width: 36px;
     height: 20px;
-    border-radius: 10px;
-    background: value ? Palette.accent : #2a2c34;
+    border-radius: 8px;
+    background: value ? Palette.accent : Palette.border;
     animate background { duration: 160ms; easing: ease-out; }
 
     Rectangle {
@@ -501,8 +503,8 @@ component Toggle inherits Rectangle {
         width: 16px;
         height: 16px;
         border-radius: 8px;
-        background: #ffffff;
-        animate x { duration: 160ms; easing: ease-out; }
+        background: value ? Palette.bg : Palette.text-dim;
+        animate x, background { duration: 160ms; easing: ease-out; }
     }
 
     TouchArea {
@@ -536,7 +538,7 @@ component SettingRow inherits Rectangle {
                 text: root.title;
                 color: Palette.text;
                 font-size: 13px;
-                font-weight: 600;
+                font-weight: 500;
                 horizontal-alignment: left;
             }
             if subtitle != "": Text {
@@ -565,7 +567,7 @@ component SettingRow inherits Rectangle {
 
 component SectionHeader inherits Rectangle {
     in property <string> label;
-    height: 18px;
+    height: 20px;
     background: transparent;
     Text {
         x: 0;
@@ -575,7 +577,7 @@ component SectionHeader inherits Rectangle {
         text: root.label;
         color: Palette.text-muted;
         font-size: 11px;
-        font-weight: 700;
+        font-weight: 500;
         horizontal-alignment: left;
         vertical-alignment: center;
     }
@@ -618,17 +620,17 @@ component SettingsPage inherits Rectangle {
                 horizontal-stretch: 1;
                 text: "Settings";
                 color: Palette.text;
-                font-size: 22px;
-                font-weight: 700;
+                font-size: 20px;
+                font-weight: 600;
                 horizontal-alignment: left;
             }
 
             VerticalLayout {
                 spacing: 8px;
-                SectionHeader { label: "BEHAVIOR"; }
+                SectionHeader { label: "Behavior"; }
                 Rectangle {
                     background: Palette.card;
-                    border-radius: 12px;
+                    border-radius: 8px;
                     border-width: 1px;
                     border-color: Palette.border;
                     clip: true;
@@ -666,10 +668,10 @@ component SettingsPage inherits Rectangle {
 
             VerticalLayout {
                 spacing: 8px;
-                SectionHeader { label: "UPDATES"; }
+                SectionHeader { label: "Updates"; }
                 Rectangle {
                     background: Palette.card;
-                    border-radius: 12px;
+                    border-radius: 8px;
                     border-width: 1px;
                     border-color: Palette.border;
                     clip: true;
@@ -688,10 +690,10 @@ component SettingsPage inherits Rectangle {
 
             VerticalLayout {
                 spacing: 8px;
-                SectionHeader { label: "DLL SLOT"; }
+                SectionHeader { label: "DLL slot"; }
                 Rectangle {
                     background: Palette.card;
-                    border-radius: 12px;
+                    border-radius: 8px;
                     border-width: 1px;
                     border-color: Palette.border;
 
@@ -706,7 +708,7 @@ component SettingsPage inherits Rectangle {
                                 text: "Which OVson.dll the loader injects";
                                 color: Palette.text;
                                 font-size: 13px;
-                                font-weight: 600;
+                                font-weight: 500;
                                 horizontal-alignment: left;
                             }
                             Text {
@@ -726,7 +728,7 @@ component SettingsPage inherits Rectangle {
                             Rectangle {
                                 height: 32px;
                                 horizontal-stretch: 1;
-                                border-radius: 7px;
+                                border-radius: 6px;
                                 background: root.dll-slot == opt.idx
                                             ? Palette.accent-dim
                                             : (slot-touch.has-hover
@@ -734,8 +736,8 @@ component SettingsPage inherits Rectangle {
                                                : transparent);
                                 border-width: 1px;
                                 border-color: root.dll-slot == opt.idx
-                                              ? Palette.accent
-                                              : Palette.border-hover;
+                                              ? Palette.border-hover
+                                              : Palette.border;
                                 animate background, border-color {
                                     duration: 130ms;
                                 }
@@ -757,14 +759,13 @@ component SettingsPage inherits Rectangle {
                                            ? Palette.text
                                            : Palette.text-dim;
                                     font-size: 11px;
-                                    font-weight: root.dll-slot == opt.idx
-                                                 ? 700 : 600;
+                                    font-weight: 500;
                                 }
                             }
                         }
 
                         if dll-slot == 2 && custom-dll-path != "": Rectangle {
-                            background: #14151b;
+                            background: Palette.panel;
                             border-radius: 6px;
                             border-width: 1px;
                             border-color: Palette.border;
@@ -789,10 +790,10 @@ component SettingsPage inherits Rectangle {
 
             VerticalLayout {
                 spacing: 8px;
-                SectionHeader { label: "PRE-GAME CHAT LOG PATHS"; }
+                SectionHeader { label: "Pre-game chat log paths"; }
                 Rectangle {
                     background: Palette.card;
-                    border-radius: 12px;
+                    border-radius: 8px;
                     border-width: 1px;
                     border-color: Palette.border;
 
@@ -810,7 +811,7 @@ component SettingsPage inherits Rectangle {
                                         text: "Lunar Client Log Path";
                                         color: Palette.text;
                                         font-size: 13px;
-                                        font-weight: 600;
+                                        font-weight: 500;
                                     }
                                     Text {
                                         text: "Log directory or log file for Lunar Client";
@@ -822,9 +823,9 @@ component SettingsPage inherits Rectangle {
                                     width: 76px;
                                     height: 28px;
                                     border-radius: 6px;
-                                    background: lunar-btn-touch.has-hover ? Palette.card-hover : Palette.accent-dim;
+                                    background: lunar-btn-touch.has-hover ? Palette.border-hover : Palette.accent-dim;
                                     border-width: 1px;
-                                    border-color: Palette.accent;
+                                    border-color: Palette.border;
                                     lunar-btn-touch := TouchArea {
                                         clicked => { root.pick-lunar-log-path(); }
                                         mouse-cursor: MouseCursor.pointer;
@@ -832,15 +833,15 @@ component SettingsPage inherits Rectangle {
                                     Text {
                                         x: (parent.width - self.width) / 2;
                                         y: (parent.height - self.height) / 2;
-                                        text: "Browse...";
+                                        text: "Browse…";
                                         color: Palette.text;
                                         font-size: 11px;
-                                        font-weight: 600;
+                                        font-weight: 500;
                                     }
                                 }
                             }
                             Rectangle {
-                                background: #14151b;
+                                background: Palette.panel;
                                 border-radius: 6px;
                                 border-width: 1px;
                                 border-color: Palette.border;
@@ -872,7 +873,7 @@ component SettingsPage inherits Rectangle {
                                         text: "Badlion Client Log Path";
                                         color: Palette.text;
                                         font-size: 13px;
-                                        font-weight: 600;
+                                        font-weight: 500;
                                     }
                                     Text {
                                         text: "Log directory or log file for Badlion Client";
@@ -884,9 +885,9 @@ component SettingsPage inherits Rectangle {
                                     width: 76px;
                                     height: 28px;
                                     border-radius: 6px;
-                                    background: badlion-btn-touch.has-hover ? Palette.card-hover : Palette.accent-dim;
+                                    background: badlion-btn-touch.has-hover ? Palette.border-hover : Palette.accent-dim;
                                     border-width: 1px;
-                                    border-color: Palette.accent;
+                                    border-color: Palette.border;
                                     badlion-btn-touch := TouchArea {
                                         clicked => { root.pick-badlion-log-path(); }
                                         mouse-cursor: MouseCursor.pointer;
@@ -894,15 +895,15 @@ component SettingsPage inherits Rectangle {
                                     Text {
                                         x: (parent.width - self.width) / 2;
                                         y: (parent.height - self.height) / 2;
-                                        text: "Browse...";
+                                        text: "Browse…";
                                         color: Palette.text;
                                         font-size: 11px;
-                                        font-weight: 600;
+                                        font-weight: 500;
                                     }
                                 }
                             }
                             Rectangle {
-                                background: #14151b;
+                                background: Palette.panel;
                                 border-radius: 6px;
                                 border-width: 1px;
                                 border-color: Palette.border;
@@ -934,7 +935,7 @@ component SettingsPage inherits Rectangle {
                                         text: "Legacy Badlion / Vanilla Log Path";
                                         color: Palette.text;
                                         font-size: 13px;
-                                        font-weight: 600;
+                                        font-weight: 500;
                                     }
                                     Text {
                                         text: "Log directory or log file for Legacy Badlion / Vanilla";
@@ -946,9 +947,9 @@ component SettingsPage inherits Rectangle {
                                     width: 76px;
                                     height: 28px;
                                     border-radius: 6px;
-                                    background: legacy-btn-touch.has-hover ? Palette.card-hover : Palette.accent-dim;
+                                    background: legacy-btn-touch.has-hover ? Palette.border-hover : Palette.accent-dim;
                                     border-width: 1px;
-                                    border-color: Palette.accent;
+                                    border-color: Palette.border;
                                     legacy-btn-touch := TouchArea {
                                         clicked => { root.pick-legacy-badlion-log-path(); }
                                         mouse-cursor: MouseCursor.pointer;
@@ -956,15 +957,15 @@ component SettingsPage inherits Rectangle {
                                     Text {
                                         x: (parent.width - self.width) / 2;
                                         y: (parent.height - self.height) / 2;
-                                        text: "Browse...";
+                                        text: "Browse…";
                                         color: Palette.text;
                                         font-size: 11px;
-                                        font-weight: 600;
+                                        font-weight: 500;
                                     }
                                 }
                             }
                             Rectangle {
-                                background: #14151b;
+                                background: Palette.panel;
                                 border-radius: 6px;
                                 border-width: 1px;
                                 border-color: Palette.border;
@@ -1070,7 +1071,7 @@ export component MainWindow inherits Window {
     Rectangle {
         x: 0; y: 0; width: root.width; height: root.height;
         background: Palette.bg.with-alpha(chrome-opacity);
-        border-radius: 16px;
+        border-radius: 8px;
         border-width: 1px;
         border-color: Palette.border.with-alpha(chrome-opacity);
         animate background, border-color {
@@ -1119,7 +1120,7 @@ export component MainWindow inherits Window {
                     width: 28px;
                     height: 28px;
                     border-radius: 6px;
-                    background: minimize-touch.has-hover ? #2b2c34 : transparent;
+                    background: minimize-touch.has-hover ? Palette.card-hover : transparent;
                     animate background { duration: 140ms; }
 
                     Rectangle {
@@ -1144,7 +1145,7 @@ export component MainWindow inherits Window {
                     width: 28px;
                     height: 28px;
                     border-radius: 6px;
-                    background: close-touch.has-hover ? #2b2c34 : transparent;
+                    background: close-touch.has-hover ? Palette.card-hover : transparent;
                     animate background { duration: 140ms; }
 
                     Image {
@@ -1214,10 +1215,10 @@ export component MainWindow inherits Window {
                 padding-top: 22px;
                 padding-bottom: 6px;
                 Text {
-                    text: "MINECRAFT INSTANCES";
+                    text: "Minecraft instances";
                     color: Palette.text;
                     font-size: 12px;
-                    font-weight: 600;
+                    font-weight: 500;
                     horizontal-stretch: 1;
                 }
                 Text {
@@ -1241,7 +1242,7 @@ export component MainWindow inherits Window {
 
                     if processes.length == 0: Rectangle {
                         height: 160px;
-                        border-radius: 12px;
+                        border-radius: 8px;
                         background: Palette.panel;
                         border-color: Palette.border;
                         border-width: 1px;
@@ -1252,7 +1253,7 @@ export component MainWindow inherits Window {
                             Text {
                                 text: "No Minecraft windows found";
                                 color: Palette.text;
-                                font-size: 15px;
+                                font-size: 14px;
                                 font-weight: 600;
                                 horizontal-alignment: center;
                             }
@@ -1286,16 +1287,16 @@ export component MainWindow inherits Window {
                             padding-top: 10px;
                             padding-bottom: 2px;
                             Text {
-                                text: "ANNOUNCEMENTS";
+                                text: "Announcements";
                                 color: Palette.text;
                                 font-size: 12px;
-                                font-weight: 600;
+                                font-weight: 500;
                                 horizontal-stretch: 1;
                             }
                         }
 
                         Rectangle {
-                            border-radius: 10px;
+                            border-radius: 8px;
                             background: Palette.card;
                             border-width: 1px;
                             border-color: Palette.border;
@@ -1312,7 +1313,7 @@ export component MainWindow inherits Window {
                                         Text {
                                             text: "Welcome to OVson!";
                                             color: Palette.text;
-                                            font-weight: 700;
+                                            font-weight: 600;
                                             font-size: 14px;
                                         }
                                         Text {
@@ -1338,7 +1339,7 @@ export component MainWindow inherits Window {
                                             text: ann.content;
                                             color: Palette.text;
                                             font-size: 16px;
-                                            font-weight: 700;
+                                            font-weight: 600;
                                             wrap: word-wrap;
                                             padding-bottom: 4px;
                                         }
@@ -1365,12 +1366,12 @@ export component MainWindow inherits Window {
                                                     alignment: start;
                                                     Text {
                                                         text: ann.content;
-                                                        color: #3b82f6;
+                                                        color: Palette.text;
                                                         font-size: 13px;
                                                     }
                                                     Rectangle {
                                                         height: 1px;
-                                                        background: #3b82f6;
+                                                        background: Palette.border-hover;
                                                     }
                                                 }
                                             }
@@ -1387,12 +1388,12 @@ export component MainWindow inherits Window {
                 padding: 16px;
                 alignment: center;
                 PrimaryButton {
-                    label: phase == 3                ? "INJECTING…"
-                         : phase == 4                ? "DONE"
-                         : processes.length == 0     ? "WAITING FOR MINECRAFT"
-                         : selected-count == 0       ? "SELECT AN INSTANCE"
-                         : selected-count == 1       ? "INJECT"
-                                                     : "INJECT \{selected-count} INSTANCES";
+                    label: phase == 3                ? "Injecting…"
+                         : phase == 4                ? "Done"
+                         : processes.length == 0     ? "Waiting for Minecraft"
+                         : selected-count == 0       ? "Select an instance"
+                         : selected-count == 1       ? "Inject"
+                                                     : "Inject \{selected-count} instances";
                     enabled: phase == 2 && selected-count > 0;
                     clicked => { root.inject-clicked(); }
                 }
@@ -1408,8 +1409,8 @@ export component MainWindow inherits Window {
                 opacity: phase >= 2 && dump-count > 0 ? 1.0 : 0.0;
                 animate height, opacity { duration: 350ms; easing: ease-in-out; }
                 clip: true;
-                background: #2a1f12;
-                border-color: #c08440;
+                background: Palette.card;
+                border-color: #a16207;
                 border-width: 1px;
                 border-radius: 8px;
 
@@ -1426,9 +1427,9 @@ export component MainWindow inherits Window {
                             text: dump-count == 1
                                 ? "1 crash dump from a previous session is waiting."
                                 : dump-count + " crash dumps from previous sessions are waiting.";
-                            color: #f4d4a8;
+                            color: #fbbf24;
                             font-size: 12px;
-                            font-weight: 600;
+                            font-weight: 500;
                             overflow: elide;
                         }
                     }
@@ -1439,7 +1440,7 @@ export component MainWindow inherits Window {
                         background: open-touch.has-hover
                                     ? Palette.card-hover : transparent;
                         border-width: 1px;
-                        border-color: #c08440;
+                        border-color: #a16207;
                         open-touch := TouchArea {
                             clicked => { root.open-dumps-folder(); }
                             mouse-cursor: MouseCursor.pointer;
@@ -1448,8 +1449,8 @@ export component MainWindow inherits Window {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
                             text: "View";
-                            color: #f4d4a8;
-                            font-weight: 600;
+                            color: #fbbf24;
+                            font-weight: 500;
                             font-size: 10px;
                         }
                     }
@@ -1458,9 +1459,9 @@ export component MainWindow inherits Window {
                         y: (parent.height - self.height) / 2;
                         border-radius: 6px;
                         background: report-touch.has-hover
-                                    ? #c08440 : transparent;
+                                    ? #a16207 : transparent;
                         border-width: 1px;
-                        border-color: #c08440;
+                        border-color: #a16207;
                         animate background { duration: 130ms; }
                         report-touch := TouchArea {
                             clicked => { root.show-report-modal = true; }
@@ -1471,8 +1472,8 @@ export component MainWindow inherits Window {
                             y: (parent.height - self.height) / 2;
                             text: "Report…";
                             color: report-touch.has-hover
-                                   ? Palette.bg : #f4d4a8;
-                            font-weight: 700;
+                                   ? Palette.bg : #fbbf24;
+                            font-weight: 500;
                             font-size: 10px;
                         }
                     }
@@ -1504,15 +1505,11 @@ export component MainWindow inherits Window {
                 opacity: phase >= 2 && update-state >= 1 && update-state <= 6 ? 1.0 : 0.0;
                 animate height, opacity { duration: 350ms; easing: ease-in-out; }
                 clip: true;
-                background: update-state == 2 ? #0e2418
-                          : update-state == 6 ? #2a1414
-                          : update-state == 1 ? #142030
-                                              : #14272f;
+                background: Palette.card;
                 animate background { duration: 250ms; easing: ease-out; }
-                border-color: update-state == 2 ? Palette.success
+                border-color: update-state == 2 ? Palette.success-dim
                             : update-state == 6 ? Palette.error-c
-                            : update-state == 1 ? #5a8bd0
-                                                : Palette.accent;
+                                                : Palette.border;
                 animate border-color { duration: 250ms; easing: ease-out; }
                 border-width: 1px;
                 border-radius: 8px;
@@ -1539,13 +1536,13 @@ export component MainWindow inherits Window {
                                  : update-state == 6 ? Palette.error-c
                                                      : Palette.text;
                             font-size: 12px;
-                            font-weight: 600;
+                            font-weight: 500;
                             overflow: elide;
                         }
                         if update-state == 4 && update-progress < 100: Rectangle {
                             height: 3px;
                             border-radius: 1.5px;
-                            background: #2a3550;
+                            background: Palette.border;
                             Rectangle {
                                 x: 0; y: 0;
                                 width: parent.width * update-progress / 100;
@@ -1578,7 +1575,7 @@ export component MainWindow inherits Window {
                             y: (parent.height - self.height) / 2;
                             text: "View Changes";
                             color: Palette.text-dim;
-                            font-weight: 600;
+                            font-weight: 500;
                             font-size: 10px;
                         }
                     }
@@ -1589,9 +1586,9 @@ export component MainWindow inherits Window {
                         y: (parent.height - self.height) / 2;
                         border-radius: 6px;
                         background: install-touch.pressed   ? Palette.accent-dim
-                                  : install-touch.has-hover ? #ffffff
-                                  : update-state == 4       ? #2a3550
-                                                            : #cbd5e1;
+                                  : install-touch.has-hover ? #e4e4e7
+                                  : update-state == 4       ? Palette.border
+                                                            : Palette.accent;
                         animate background { duration: 130ms; easing: ease-out; }
                         opacity: update-state == 4 ? 0.6 : 1.0;
 
@@ -1605,12 +1602,12 @@ export component MainWindow inherits Window {
                         Text {
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
-                            text: update-state == 5 ? "RESTART"
+                            text: update-state == 5 ? "Restart"
                                 : update-state == 4 ? "…"
-                                                    : "INSTALL";
+                                                    : "Install";
                             color: update-state == 4 ? Palette.text-dim
                                                      : Palette.bg;
-                            font-weight: 700;
+                            font-weight: 500;
                             font-size: 11px;
                         }
                     }
@@ -1691,7 +1688,7 @@ export component MainWindow inherits Window {
 
             Text {
                 text: "OVson";
-                font-weight: 800;
+                font-weight: 600;
                 color: Palette.text;
                 font-size: logo-text-size;
                 vertical-alignment: center;
@@ -1714,7 +1711,7 @@ export component MainWindow inherits Window {
             x: (root.width - self.width) / 2;
             y: (root.height - self.height) / 2;
             background: Palette.card;
-            border-radius: 12px;
+            border-radius: 8px;
             border-width: 1px;
             border-color: Palette.border;
 
@@ -1726,7 +1723,7 @@ export component MainWindow inherits Window {
                     text: "Report crash dumps";
                     color: Palette.text;
                     font-size: 16px;
-                    font-weight: 700;
+                    font-weight: 600;
                 }
 
                 Text {
@@ -1758,14 +1755,14 @@ export component MainWindow inherits Window {
                             text: "Cancel";
                             color: Palette.text-dim;
                             font-size: 13px;
-                            font-weight: 600;
+                            font-weight: 500;
                         }
                     }
 
                     Rectangle {
                         width: 100px; height: 36px;
                         border-radius: 8px;
-                        background: delete-touch.has-hover ? #2a1414 : transparent;
+                        background: delete-touch.has-hover ? Palette.card-hover : transparent;
                         border-width: 1px;
                         border-color: delete-touch.has-hover ? Palette.error-c : Palette.border-hover;
                         delete-touch := TouchArea {
@@ -1778,14 +1775,14 @@ export component MainWindow inherits Window {
                             text: "Delete all";
                             color: delete-touch.has-hover ? Palette.error-c : Palette.text-dim;
                             font-size: 13px;
-                            font-weight: 600;
+                            font-weight: 500;
                         }
                     }
 
                     Rectangle {
                         width: 120px; height: 36px;
                         border-radius: 8px;
-                        background: report-modal-touch.has-hover ? #ffffff : #ebecf0;
+                        background: report-modal-touch.has-hover ? #e4e4e7 : Palette.accent;
                         report-modal-touch := TouchArea {
                             clicked => { root.report-modal-yes(); root.show-report-modal = false; }
                             mouse-cursor: MouseCursor.pointer;
@@ -1796,7 +1793,7 @@ export component MainWindow inherits Window {
                             text: "Report issue";
                             color: Palette.bg;
                             font-size: 13px;
-                            font-weight: 600;
+                            font-weight: 500;
                         }
                     }
                 }
